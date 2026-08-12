@@ -10,7 +10,7 @@ function MyModel() {
   
   useEffect(() => {
     setInterval(() => {
-        setHeight((prevHeight) => (prevHeight <= 0.5 ? prevHeight : prevHeight - 0.01));
+        setHeight((prevHeight) => (prevHeight <= 0.5 ? prevHeight : prevHeight - 0.05));
     }, 100);
   }, [])
 
