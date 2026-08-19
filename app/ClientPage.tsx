@@ -103,13 +103,17 @@ export default function ModelViewer() {
   }, [selectedUpfits]);
 
   const handleSelectVehicle = (id: number) => {
-    setSelectedVehicle(VEHICLES.find((v) => v.id === id));
+    const vehicle = VEHICLES.find((v) => v.id === id);
+    if (!vehicle) return;
+
+    setSelectedVehicle(vehicle);
     setSelectedUpfits(UPFITS.filter((u) => u?.vehicleIds?.includes(id)));
   };
 
   const handleSelectUpfits = (id: number) => {
     const selectedUpfit = UPFITS.find((u) => u.id === id);
-    console.log(selectedUpfit);
+    if (!selectedUpfit) return;
+
     setSelectedUpfits((prevState) => {
       if (!prevState.find((p) => p.id === id)) {
         return [...prevState, selectedUpfit];
