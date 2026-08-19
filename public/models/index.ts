@@ -6,7 +6,7 @@ export type GLBModel = {
         scale?: number
         position?: number[]
     }
-    vehicleId?: number[] // associated vehicle Ids
+    vehicleIds?: number[] // associated vehicle Ids
 }
 
 export const VEHICLES: GLBModel[] = [
@@ -17,7 +17,6 @@ export const VEHICLES: GLBModel[] = [
         initialConfig: {
             scale: 1,
         },
-        vehicleId: [0]
     },
     {
         id: 1,
@@ -26,30 +25,29 @@ export const VEHICLES: GLBModel[] = [
         initialConfig: {
             scale: 1,
         },
-        vehicleId: [0]
     },
 ]
 
 export const UPFITS:GLBModel[] = [
     {
         id: 0,
-        name: "RAM-2500HD-CC Body",
+        name: "RAM-2500HD-CC 696j Body",
         fileName: "RAM 2500HD CC 696j Body.glb",
         initialConfig: {
             scale: 1,
             position: [0,0,0]
         },
-        vehicleId: [0]
+        vehicleIds: [0]
     },
     {
         id: 1,
-        name: "RAM-2500HD-CC Body",
+        name: "RAM-2500HD-CC 696j Utility Rack",
         fileName: "RAM 2500HD CC 696j Utility Rack.glb",
         initialConfig: {
             scale: 1,
             position: [0,0,0]
         },
-        vehicleId: [0]
+        vehicleIds: [0]
     },
     {
         id: 2,
@@ -59,6 +57,6 @@ export const UPFITS:GLBModel[] = [
             scale: 1,
             position: [0,0,0]
         },
-        vehicleId: [1]
+        vehicleIds: [1]
     },
 ]
