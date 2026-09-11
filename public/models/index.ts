@@ -90,7 +90,7 @@ export const UPFITS:GLBModel[] = [
         vehicleIds: [0]
     },
     {
-        id: 5,
+        id: 6,
         name: "Chev express 3500 - KUV129SU - Tri wing ladder rack",
         fileName: "Chev express 3500 - KUV129SU - Tri wing ladder rack.glb",
         initialConfig: {

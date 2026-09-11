@@ -26,11 +26,13 @@ const Model = (props: { model: GLBModel }) => {
 const ScreenControls = ({
   children,
   vehicle,
+  selectedUpfits,
   onChangeVehicle,
   onChangeUpfit,
 }: {
   children: ReactNode;
   vehicle: GLBModel;
+  selectedUpfits: GLBModel[];
   onChangeVehicle: (id: number) => void;
   onChangeUpfit: (id: number) => void;
 }) => {
@@ -59,14 +61,18 @@ const ScreenControls = ({
               {vehicle?.name}
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              {VEHICLES.map((vehicle, i) => (
+              {VEHICLES.map((vehicleItem, i) => (
                 <DropdownMenuItem
                   key={i}
                   onClick={(e) => {
-                    onChangeVehicle(vehicle.id);
+                    onChangeVehicle(vehicleItem.id);
                   }}
                 >
-                  {vehicle.name}
+                  <span
+                    className={`flex items-center gap-2 ${vehicleItem.id === vehicle.id ? "font-bold" : ""}`}
+                  >
+                    {vehicleItem.name}
+                  </span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -83,7 +89,11 @@ const ScreenControls = ({
                     onChangeUpfit(upfit.id);
                   }}
                 >
-                  {upfit.name}
+                  <span
+                    className={`flex items-center gap-2 ${selectedUpfits.includes(upfit) ? "font-bold" : ""}`}
+                  >
+                    {upfit.name}
+                  </span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -127,6 +137,7 @@ export default function ModelViewer() {
     <div className="w-full h-screen bg-gray-600 flex items-center justify-center">
       <ScreenControls
         vehicle={selectedVehicle}
+        selectedUpfits={selectedUpfits}
         onChangeVehicle={(id) => {
           const vehicle = VEHICLES.find((v) => v.id === id);
           if (vehicle) handleSelectVehicle(id);
