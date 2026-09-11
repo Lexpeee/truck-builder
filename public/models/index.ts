@@ -59,4 +59,45 @@ export const UPFITS:GLBModel[] = [
         },
         vehicleIds: [1]
     },
+    {
+        id: 3,
+        name: "RAM-2500HD-CC 696j Hitch Recess Bumper",
+        fileName: "RAM 2500HD CC 696j Hitch Recess Bumper.glb",
+        initialConfig: {
+            scale: 1,
+            position: [0,0,0]
+        },
+        vehicleIds: [0]
+    },
+    {
+        id: 4,
+        name: "RAM 2500HD CC 696j Step Bumper",
+        fileName: "RAM 2500HD CC 696j Step Bumper.glb",
+        initialConfig: {
+            scale: 1,
+            position: [0,0,0]
+        },
+        vehicleIds: [0]
+    },
+    {
+        id: 5,
+        name: "RAM-2500HD-CC 696j Straight Bumper",
+        fileName: "RAM 2500HD CC 696j Straight Bumper.glb",
+        initialConfig: {
+            scale: 1,
+            position: [0,0,0]
+        },
+        vehicleIds: [0]
+    },
+    {
+        id: 5,
+        name: "Chev express 3500 - KUV129SU - Tri wing ladder rack",
+        fileName: "Chev express 3500 - KUV129SU - Tri wing ladder rack.glb",
+        initialConfig: {
+            scale: 1,
+            position: [0,0,0]
+        },
+        vehicleIds: [1]
+    },
+
 ]
