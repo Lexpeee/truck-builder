@@ -1,169 +1,36 @@
 "use client";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { GLBModel, UPFITS, VEHICLES } from "@/public/models";
-import { Environment, OrbitControls, useGLTF } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
-import { ReactNode, Suspense, useEffect, useState } from "react";
+import BuilderPanel from "@/components/builder/BuilderPanel";
+import Scene from "@/components/builder/Scene";
+import { changeVehicle, toggleUpfit, type Build } from "@/lib/builder";
+import { VEHICLES, getVehicle } from "@/lib/catalog";
+import { useState } from "react";
 
-const Model = (props: { model: GLBModel }) => {
-  const { model } = props;
-  const { scene } = useGLTF(`/models/${model.fileName}`);
-  return (
-    <primitive
-      object={scene}
-      scale={1}
-      position={model.initialConfig?.position}
-    />
-  );
-};
-
-const ScreenControls = ({
-  children,
-  vehicle,
-  selectedUpfits,
-  onChangeVehicle,
-  onChangeUpfit,
-}: {
-  children: ReactNode;
-  vehicle: GLBModel;
-  selectedUpfits: GLBModel[];
-  onChangeVehicle: (id: number) => void;
-  onChangeUpfit: (id: number) => void;
-}) => {
-  const filteredUpfits = UPFITS.filter((upfit) =>
-    upfit.vehicleIds?.includes(vehicle.id),
-  );
+export default function TruckBuilder() {
+  const [build, setBuild] = useState<Build>(() => changeVehicle(VEHICLES[0].id));
+  const [notices, setNotices] = useState<string[]>([]);
 
   return (
-    <div className="h-full w-full relative flex flex-column">
-      <div className="absolute p-4 bg-black w-full">
-        <h1 style={{ zIndex: 100 }}>{vehicle.name}</h1>
+    <div className="flex h-screen w-full">
+      <div className="relative min-w-0 flex-1">
+        <h1 className="absolute left-0 top-0 z-10 bg-black/70 px-4 py-2 text-white">
+          {getVehicle(build.vehicleId)?.name}
+        </h1>
+        <Scene vehicleId={build.vehicleId} upfitIds={build.upfitIds} />
       </div>
-      <div style={{ height: "inherit", width: "inherit" }}>{children}</div>
-      <div className="absolute p-4 bottom-0 w-full z-100">
-        <div className="flex flex-row justify-center gap-2">
-          <DropdownMenu
-            onOpenChange={(open) => {
-              if (!open) {
-                setTimeout(() => {
-                  document.body.style.pointerEvents = "";
-                }, 100);
-              }
-            }}
-          >
-            <DropdownMenuTrigger render={<Button />}>
-              {vehicle?.name}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {VEHICLES.map((vehicleItem, i) => (
-                <DropdownMenuItem
-                  key={i}
-                  onClick={(e) => {
-                    onChangeVehicle(vehicleItem.id);
-                  }}
-                >
-                  <span
-                    className={`flex items-center gap-2 ${vehicleItem.id === vehicle.id ? "font-bold" : ""}`}
-                  >
-                    {vehicleItem.name}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button />}>
-              Upfits
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {filteredUpfits.map((upfit, i) => (
-                <DropdownMenuItem
-                  key={i}
-                  onClick={(e) => {
-                    onChangeUpfit(upfit.id);
-                  }}
-                >
-                  <span
-                    className={`flex items-center gap-2 ${selectedUpfits.includes(upfit) ? "font-bold" : ""}`}
-                  >
-                    {upfit.name}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default function ModelViewer() {
-  const [selectedVehicle, setSelectedVehicle] = useState(VEHICLES[0]);
-  const [selectedUpfits, setSelectedUpfits] = useState([UPFITS[0], UPFITS[1]]);
-
-  useEffect(() => {
-    console.log(selectedUpfits);
-  }, [selectedUpfits]);
-
-  const handleSelectVehicle = (id: number) => {
-    const vehicle = VEHICLES.find((v) => v.id === id);
-    if (!vehicle) return;
-
-    setSelectedVehicle(vehicle);
-    setSelectedUpfits(UPFITS.filter((u) => u?.vehicleIds?.includes(id)));
-  };
-
-  const handleSelectUpfits = (id: number) => {
-    const selectedUpfit = UPFITS.find((u) => u.id === id);
-    if (!selectedUpfit) return;
-
-    setSelectedUpfits((prevState) => {
-      if (!prevState.find((p) => p.id === id)) {
-        return [...prevState, selectedUpfit];
-      } else {
-        return prevState.filter((p) => p.id !== id);
-      }
-    });
-  };
-
-  return (
-    <div className="w-full h-screen bg-gray-600 flex items-center justify-center">
-      <ScreenControls
-        vehicle={selectedVehicle}
-        selectedUpfits={selectedUpfits}
+      <BuilderPanel
+        build={build}
+        notices={notices}
         onChangeVehicle={(id) => {
-          const vehicle = VEHICLES.find((v) => v.id === id);
-          if (vehicle) handleSelectVehicle(id);
+          setBuild(changeVehicle(id));
+          setNotices([]);
         }}
-        onChangeUpfit={handleSelectUpfits}
-      >
-        <Canvas camera={{ position: [10, 5, 5], fov: 30 }}>
-          {/* Lights are required to see the material properly */}
-          <ambientLight intensity={0.5} />
-          <directionalLight position={[10, 10, 5]} intensity={1} />
-          <Environment files="/hdri/grasslands_sunset_4k.hdr" />
-
-          {/* Suspense is required while the external model file downloads */}
-          <Suspense fallback={null}>
-            {/* model */}
-            <Model model={selectedVehicle} />
-            {/* upfit */}
-            {selectedUpfits.map((selectedUpfit, i) => (
-              <Model model={selectedUpfit} key={i} />
-            ))}
-          </Suspense>
-
-          {/* OrbitControls let you rotate the camera with your mouse */}
-          <OrbitControls />
-        </Canvas>
-      </ScreenControls>
+        onToggleUpfit={(id) => {
+          const result = toggleUpfit(build, id);
+          setBuild(result.build);
+          setNotices(result.notices);
+        }}
+        onDismissNotices={() => setNotices([])}
+      />
     </div>
   );
 }
