@@ -3,6 +3,7 @@ import { getUpfit, getVehicle, type Upfit, type Vehicle } from "@/lib/catalog";
 import { Environment, OrbitControls, useGLTF } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useMemo } from "react";
+import { Helmet } from "react-helmet-async";
 
 const Model = ({ item }: { item: Vehicle | Upfit }) => {
   const { scene } = useGLTF(`/models/${item.fileName}`);
@@ -21,18 +22,23 @@ export default function Scene({
 }) {
   const vehicle = getVehicle(vehicleId);
   return (
-    <Canvas camera={{ position: [10, 5, 5], fov: 30 }}>
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 10, 5]} intensity={1} />
-      <Environment files="/hdri/grasslands_sunset_4k.hdr" />
-      <Suspense fallback={null}>
-        {vehicle && <Model item={vehicle} />}
-        {upfitIds.map((id) => {
-          const upfit = getUpfit(id);
-          return upfit && <Model key={id} item={upfit} />;
-        })}
-      </Suspense>
-      <OrbitControls makeDefault />
-    </Canvas>
+    <>
+      <Helmet>
+        <title>{vehicle?.name || "Showroom"} | NWT Truck Builder</title>
+      </Helmet>
+      <Canvas camera={{ position: [10, 5, 5], fov: 30 }}>
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[10, 10, 5]} intensity={1} />
+        <Environment files="/hdri/grasslands_sunset_4k.hdr" />
+        <Suspense fallback={null}>
+          {vehicle && <Model item={vehicle} />}
+          {upfitIds.map((id) => {
+            const upfit = getUpfit(id);
+            return upfit && <Model key={id} item={upfit} />;
+          })}
+        </Suspense>
+        <OrbitControls makeDefault />
+      </Canvas>
+    </>
   );
 }
