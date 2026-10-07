@@ -30,6 +30,10 @@ export default function Scene({
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 5]} intensity={1} />
         <Environment files="/hdri/grasslands_sunset_4k.hdr" />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <circleGeometry args={[4, 64]} />
+          <meshStandardMaterial color="#3f3f46" roughness={0.6} metalness={0.1} />
+        </mesh>
         <Suspense fallback={null}>
           {vehicle && <Model item={vehicle} />}
           {upfitIds.map((id) => {
@@ -37,7 +41,12 @@ export default function Scene({
             return upfit && <Model key={id} item={upfit} />;
           })}
         </Suspense>
-        <OrbitControls makeDefault />
+        <OrbitControls
+          makeDefault
+          enablePan={false}
+          minPolarAngle={Math.PI / 4}
+          maxPolarAngle={(3 * Math.PI) / 4}
+        />
       </Canvas>
     </>
   );
