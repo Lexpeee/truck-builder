@@ -1,12 +1,5 @@
 "use client";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { previewToggle, type Build } from "@/lib/builder";
 import {
   CATEGORIES,
@@ -16,21 +9,89 @@ import {
   upfitsForVehicle,
   type Upfit,
 } from "@/lib/catalog";
-import { ChevronDownIcon } from "lucide-react";
-
-/** Radio value representing "no upfit installed" in an exclusive category. */
-const NONE = "__none__";
+import { Check, Info, X } from "lucide-react";
+import type { ReactNode } from "react";
 
 const nameList = (ids: string[]) =>
   ids.map((id) => getUpfit(id)?.name ?? id).join(", ");
 
-const triggerClassName =
-  "flex w-full items-center justify-between gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-sm hover:bg-zinc-800 data-popup-open:border-white";
+/** What picking an upfit implies, shown under its name before the click. */
+const upfitHint = (build: Build, upfit: Upfit, isOn: boolean) => {
+  const { adds, removes } = previewToggle(build, upfit.id);
+  const effects = isOn
+    ? [removes.length && `Also removes ${nameList(removes)}`]
+    : [
+        adds.length && `Also adds ${nameList(adds)}`,
+        removes.length && `Replaces ${nameList(removes)}`,
+      ];
+  // Missing requirements already show up as "Also adds".
+  const needs =
+    !adds.length &&
+    upfit.requires?.length &&
+    `Requires ${nameList(upfit.requires)}`;
+  return [needs, ...effects].filter(Boolean).join(" · ") || undefined;
+};
 
-const menuContentClassName =
-  "min-w-(--anchor-width) border border-zinc-700 bg-zinc-900 p-1 text-zinc-100 ring-0";
+/** A selectable card backed by a native radio or checkbox input. */
+function Option({
+  type,
+  name,
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  type: "radio" | "checkbox";
+  name: string;
+  checked: boolean;
+  onChange: () => void;
+  label: ReactNode;
+  hint?: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/50 has-checked:border-primary has-checked:bg-primary/5 has-focus-visible:ring-3 has-focus-visible:ring-ring/50">
+      <input
+        type={type}
+        name={name}
+        checked={checked}
+        onChange={onChange}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden
+        className={`mt-0.5 flex size-5 shrink-0 items-center justify-center border-2 border-muted-foreground/40 text-primary-foreground peer-checked:border-primary peer-checked:bg-primary ${
+          type === "radio" ? "rounded-full" : "rounded-md"
+        }`}
+      >
+        <Check className="size-3 stroke-3" />
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-sm font-semibold">{label}</span>
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      </span>
+    </label>
+  );
+}
 
-const menuItemClassName = "focus:bg-zinc-800 focus:text-zinc-100";
+function Group({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  aside?: string;
+  children: ReactNode;
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-2 flex w-full items-baseline justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+        {aside && <span className="font-normal normal-case">{aside}</span>}
+      </legend>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">{children}</div>
+    </fieldset>
+  );
+}
 
 export default function BuilderPanel({
   build,
@@ -48,168 +109,92 @@ export default function BuilderPanel({
   const available = upfitsForVehicle(build.vehicleId);
   const installed = new Set(build.upfitIds);
 
-  const optionLabel = (upfit: Upfit) => {
-    const isOn = installed.has(upfit.id);
-    const { adds, removes } = previewToggle(build, upfit.id);
-    const hint = isOn
-      ? removes.length
-        ? `Also removes ${nameList(removes)}`
-        : null
-      : [
-          adds.length && `Also adds ${nameList(adds)}`,
-          removes.length && `Replaces ${nameList(removes)}`,
-        ]
-          .filter(Boolean)
-          .join(" · ") || null;
-    const needs = upfit.requires?.length
-      ? `Requires ${nameList(upfit.requires)}`
-      : null;
-    return (
-      <div className="flex flex-col gap-0.5">
-        <span>{upfit.name}</span>
-        {(needs || hint) && (
-          <span className="text-xs text-zinc-400">
-            {[needs, hint].filter(Boolean).join(" — ")}
-          </span>
-        )}
-      </div>
-    );
-  };
-
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col gap-6 overflow-y-auto bg-zinc-900 p-4 text-zinc-100">
-      <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-          Vehicle
-        </h2>
-        <DropdownMenu>
-          <DropdownMenuTrigger className={triggerClassName}>
-            {getVehicle(build.vehicleId)?.name}
-            <ChevronDownIcon className="size-4 shrink-0 text-zinc-400" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className={menuContentClassName}>
-            <DropdownMenuRadioGroup
-              value={build.vehicleId}
-              onValueChange={(value) => onChangeVehicle(value as string)}
+    <div className="flex min-h-full flex-col">
+      <div className="flex flex-col gap-6 p-5">
+        <Group title="Vehicle">
+          {VEHICLES.map((v) => (
+            <Option
+              key={v.id}
+              type="radio"
+              name="vehicle"
+              checked={build.vehicleId === v.id}
+              onChange={() => onChangeVehicle(v.id)}
+              label={v.name}
+            />
+          ))}
+        </Group>
+
+        {notices.length > 0 && (
+          <Alert role="status" className="border-primary/30 bg-primary/5 pr-10">
+            <Info className="text-primary" />
+            <AlertDescription>
+              <ul className="space-y-0.5">
+                {notices.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+            <button
+              onClick={onDismissNotices}
+              aria-label="Dismiss"
+              className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              {VEHICLES.map((v) => (
-                <DropdownMenuRadioItem
-                  key={v.id}
-                  value={v.id}
-                  closeOnClick
-                  className={menuItemClassName}
-                >
-                  {v.name}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </section>
+              <X className="size-4" />
+            </button>
+          </Alert>
+        )}
 
-      {CATEGORIES.map((category) => {
-        const items = available.filter((u) => u.category === category.id);
-        if (!items.length) return null;
+        {CATEGORIES.map((category) => {
+          const items = available.filter((u) => u.category === category.id);
+          if (!items.length) return null;
+          const selected = items.find((u) => installed.has(u.id));
 
-        const selected = items.filter((u) => installed.has(u.id));
-        const label = selected.length
-          ? nameList(selected.map((u) => u.id))
-          : "None";
+          return (
+            <Group
+              key={category.id}
+              title={category.label}
+              aside={category.exclusive ? "Choose one" : "Choose any"}
+            >
+              {category.exclusive && (
+                <Option
+                  type="radio"
+                  name={category.id}
+                  checked={!selected}
+                  onChange={() => selected && onToggleUpfit(selected.id)}
+                  label="None"
+                />
+              )}
+              {items.map((upfit) => {
+                const isOn = installed.has(upfit.id);
+                return (
+                  <Option
+                    key={upfit.id}
+                    type={category.exclusive ? "radio" : "checkbox"}
+                    name={category.id}
+                    checked={isOn}
+                    onChange={() => onToggleUpfit(upfit.id)}
+                    label={upfit.name}
+                    hint={upfitHint(build, upfit, isOn)}
+                  />
+                );
+              })}
+            </Group>
+          );
+        })}
+      </div>
 
-        return (
-          <section key={category.id}>
-            <h2 className="mb-2 flex items-baseline justify-between text-xs font-semibold uppercase tracking-wide text-zinc-400">
-              {category.label}
-              <span className="font-normal normal-case">
-                {category.exclusive ? "choose one" : "choose any"}
-              </span>
-            </h2>
-            <DropdownMenu>
-              <DropdownMenuTrigger className={triggerClassName}>
-                <span className="truncate">{label}</span>
-                <ChevronDownIcon className="size-4 shrink-0 text-zinc-400" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className={menuContentClassName}>
-                {category.exclusive ? (
-                  <DropdownMenuRadioGroup
-                    value={selected[0]?.id ?? NONE}
-                    onValueChange={(value) => {
-                      if (value === NONE) {
-                        if (selected[0]) onToggleUpfit(selected[0].id);
-                      } else {
-                        onToggleUpfit(value as string);
-                      }
-                    }}
-                  >
-                    <DropdownMenuRadioItem
-                      value={NONE}
-                      closeOnClick
-                      className={menuItemClassName}
-                    >
-                      None
-                    </DropdownMenuRadioItem>
-                    {items.map((upfit) => (
-                      <DropdownMenuRadioItem
-                        key={upfit.id}
-                        value={upfit.id}
-                        closeOnClick
-                        className={menuItemClassName}
-                      >
-                        {optionLabel(upfit)}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                ) : (
-                  items.map((upfit) => (
-                    <DropdownMenuCheckboxItem
-                      key={upfit.id}
-                      checked={installed.has(upfit.id)}
-                      onCheckedChange={() => onToggleUpfit(upfit.id)}
-                      className={menuItemClassName}
-                    >
-                      {optionLabel(upfit)}
-                    </DropdownMenuCheckboxItem>
-                  ))
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </section>
-        );
-      })}
-
-      {notices.length > 0 && (
-        <section
-          role="status"
-          className="rounded-md border border-amber-500/50 bg-amber-950/40 p-3 text-xs"
-        >
-          <ul className="list-disc space-y-1 pl-4">
-            {notices.map((n, i) => (
-              <li key={i}>{n}</li>
-            ))}
-          </ul>
-          <button
-            onClick={onDismissNotices}
-            className="mt-2 underline underline-offset-2"
-          >
-            Dismiss
-          </button>
-        </section>
-      )}
-
-      <section className="mt-auto border-t border-zinc-700 pt-3 text-sm">
-        <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+      <section className="sticky bottom-0 mt-auto border-t bg-background/95 p-5 backdrop-blur">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Your build
         </h2>
-        {build.upfitIds.length ? (
-          <ul className="space-y-0.5">
-            {build.upfitIds.map((id) => (
-              <li key={id}>{getUpfit(id)?.name}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-zinc-400">Stock vehicle, no upfits.</p>
-        )}
+        <p className="mt-1 font-bold">{getVehicle(build.vehicleId)?.name}</p>
+        <p className="text-sm text-muted-foreground">
+          {build.upfitIds.length
+            ? nameList(build.upfitIds)
+            : "Stock vehicle, no upfits."}
+        </p>
       </section>
-    </aside>
+    </div>
   );
 }
