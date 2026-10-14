@@ -128,10 +128,14 @@ export default function Home() {
             href="/"
             className="flex items-center gap-2 text-lg font-extrabold"
           >
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Truck className="size-5" />
-            </span>
-            New Work Trucks
+            <div className="p-2 bg-primary ">
+              <Image
+                src="/logo.webp"
+                alt="New Work Trucks"
+                width={80}
+                height={80}
+              />
+            </div>
           </Link>
           <nav className="flex items-center gap-8 text-sm font-medium lg:text-primary-foreground">
             <a href="#services" className="hidden hover:underline md:inline">
@@ -338,10 +342,13 @@ export default function Home() {
             href="/"
             className="flex items-center gap-2 text-lg font-extrabold text-white"
           >
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Truck className="size-5" />
-            </span>
-            New Work Trucks
+            <Image
+              src="/images/logo.webp"
+              alt="New Work Trucks"
+              className="size-10"
+              width={40}
+              height={40}
+            />
           </Link>
           <nav className="flex gap-6 text-sm">
             <a href="#services" className="hover:text-white">
