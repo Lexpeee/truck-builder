@@ -41,7 +41,7 @@ export default function TruckBuilder() {
         </div>
 
         {/* Bottom sheet on phones, sidebar on large screens. */}
-        <aside className="h-[52dvh] shrink-0 overflow-y-auto rounded-t-2xl border-t bg-background shadow-[0_-8px_24px_rgba(0,0,0,0.08)] lg:h-auto lg:w-96 lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none">
+        <aside className="max-h-[52dvh] shrink-0 overflow-y-auto rounded-t-2xl border-t bg-background shadow-[0_-8px_24px_rgba(0,0,0,0.08)] lg:h-auto lg:w-96 lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none">
           <BuilderPanel
             build={build}
             notices={notices}

@@ -1,5 +1,13 @@
 "use client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { previewToggle, type Build } from "@/lib/builder";
 import {
   CATEGORIES,
@@ -9,8 +17,11 @@ import {
   upfitsForVehicle,
   type Upfit,
 } from "@/lib/catalog";
-import { Check, Info, X } from "lucide-react";
+import { ChevronDown, Info, X } from "lucide-react";
 import type { ReactNode } from "react";
+
+/** Radio value for "no upfit installed" in an exclusive category. */
+const NONE = "__none__";
 
 const nameList = (ids: string[]) =>
   ids.map((id) => getUpfit(id)?.name ?? id).join(", ");
@@ -32,66 +43,47 @@ const upfitHint = (build: Build, upfit: Upfit, isOn: boolean) => {
   return [needs, ...effects].filter(Boolean).join(" · ") || undefined;
 };
 
-/** A selectable card backed by a native radio or checkbox input. */
-function Option({
-  type,
-  name,
-  checked,
-  onChange,
-  label,
-  hint,
-}: {
-  type: "radio" | "checkbox";
-  name: string;
-  checked: boolean;
-  onChange: () => void;
-  label: ReactNode;
-  hint?: string;
-}) {
+/** Name plus the side effects of picking it, used inside menu items. */
+function OptionLabel({ name, hint }: { name: string; hint?: string }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-primary/50 has-checked:border-primary has-checked:bg-primary/5 has-focus-visible:ring-3 has-focus-visible:ring-ring/50">
-      <input
-        type={type}
-        name={name}
-        checked={checked}
-        onChange={onChange}
-        className="peer sr-only"
-      />
-      <span
-        aria-hidden
-        className={`mt-0.5 flex size-5 shrink-0 items-center justify-center border-2 border-muted-foreground/40 text-primary-foreground peer-checked:border-primary peer-checked:bg-primary ${
-          type === "radio" ? "rounded-full" : "rounded-md"
-        }`}
-      >
-        <Check className="size-3 stroke-3" />
-      </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-sm font-semibold">{label}</span>
-        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-      </span>
-    </label>
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="font-medium">{name}</span>
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+    </span>
   );
 }
 
-function Group({
+function Field({
   title,
   aside,
+  value,
   children,
 }: {
   title: string;
   aside?: string;
+  value: string;
   children: ReactNode;
 }) {
   return (
-    <fieldset>
-      <legend className="mb-2 flex w-full items-baseline justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <section>
+      <h2 className="mb-2 flex items-baseline justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
         {aside && <span className="font-normal normal-case">{aside}</span>}
-      </legend>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">{children}</div>
-    </fieldset>
+      </h2>
+      <DropdownMenu>
+        <DropdownMenuTrigger className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2 text-left text-sm font-semibold transition-colors outline-none hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:border-primary">
+          <span className="truncate">{value}</span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="min-w-(--anchor-width) rounded-xl p-1.5">
+          {children}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </section>
   );
 }
+
+const itemClassName = "rounded-lg py-2";
 
 export default function BuilderPanel({
   build,
@@ -111,19 +103,24 @@ export default function BuilderPanel({
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="flex flex-col gap-6 p-5">
-        <Group title="Vehicle">
-          {VEHICLES.map((v) => (
-            <Option
-              key={v.id}
-              type="radio"
-              name="vehicle"
-              checked={build.vehicleId === v.id}
-              onChange={() => onChangeVehicle(v.id)}
-              label={v.name}
-            />
-          ))}
-        </Group>
+      <div className="flex flex-col gap-5 p-5">
+        <Field title="Vehicle" value={getVehicle(build.vehicleId)?.name ?? ""}>
+          <DropdownMenuRadioGroup
+            value={build.vehicleId}
+            onValueChange={(id) => onChangeVehicle(id as string)}
+          >
+            {VEHICLES.map((v) => (
+              <DropdownMenuRadioItem
+                key={v.id}
+                value={v.id}
+                closeOnClick
+                className={itemClassName}
+              >
+                <OptionLabel name={v.name} />
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </Field>
 
         {notices.length > 0 && (
           <Alert role="status" className="border-primary/30 bg-primary/5 pr-10">
@@ -148,38 +145,66 @@ export default function BuilderPanel({
         {CATEGORIES.map((category) => {
           const items = available.filter((u) => u.category === category.id);
           if (!items.length) return null;
-          const selected = items.find((u) => installed.has(u.id));
+          const selected = items.filter((u) => installed.has(u.id));
+          const label = selected.length
+            ? nameList(selected.map((u) => u.id))
+            : "None";
 
           return (
-            <Group
+            <Field
               key={category.id}
               title={category.label}
               aside={category.exclusive ? "Choose one" : "Choose any"}
+              value={label}
             >
-              {category.exclusive && (
-                <Option
-                  type="radio"
-                  name={category.id}
-                  checked={!selected}
-                  onChange={() => selected && onToggleUpfit(selected.id)}
-                  label="None"
-                />
-              )}
-              {items.map((upfit) => {
-                const isOn = installed.has(upfit.id);
-                return (
-                  <Option
+              {category.exclusive ? (
+                <DropdownMenuRadioGroup
+                  value={selected[0]?.id ?? NONE}
+                  onValueChange={(value) => {
+                    if (value === NONE) {
+                      if (selected[0]) onToggleUpfit(selected[0].id);
+                    } else {
+                      onToggleUpfit(value as string);
+                    }
+                  }}
+                >
+                  <DropdownMenuRadioItem
+                    value={NONE}
+                    closeOnClick
+                    className={itemClassName}
+                  >
+                    <OptionLabel name="None" />
+                  </DropdownMenuRadioItem>
+                  {items.map((upfit) => (
+                    <DropdownMenuRadioItem
+                      key={upfit.id}
+                      value={upfit.id}
+                      closeOnClick
+                      className={itemClassName}
+                    >
+                      <OptionLabel
+                        name={upfit.name}
+                        hint={upfitHint(build, upfit, installed.has(upfit.id))}
+                      />
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              ) : (
+                items.map((upfit) => (
+                  <DropdownMenuCheckboxItem
                     key={upfit.id}
-                    type={category.exclusive ? "radio" : "checkbox"}
-                    name={category.id}
-                    checked={isOn}
-                    onChange={() => onToggleUpfit(upfit.id)}
-                    label={upfit.name}
-                    hint={upfitHint(build, upfit, isOn)}
-                  />
-                );
-              })}
-            </Group>
+                    checked={installed.has(upfit.id)}
+                    onCheckedChange={() => onToggleUpfit(upfit.id)}
+                    className={itemClassName}
+                  >
+                    <OptionLabel
+                      name={upfit.name}
+                      hint={upfitHint(build, upfit, installed.has(upfit.id))}
+                    />
+                  </DropdownMenuCheckboxItem>
+                ))
+              )}
+            </Field>
           );
         })}
       </div>
