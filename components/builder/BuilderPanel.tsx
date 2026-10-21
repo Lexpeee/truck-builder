@@ -17,8 +17,10 @@ import {
   upfitsForVehicle,
   type Upfit,
 } from "@/lib/catalog";
+import SubmitBuildDialog from "@/components/builder/SubmitBuildDialog";
+import { Button } from "@/components/ui/button";
 import { ChevronDown, Info, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 /** Radio value for "no upfit installed" in an exclusive category. */
 const NONE = "__none__";
@@ -100,6 +102,8 @@ export default function BuilderPanel({
 }) {
   const available = upfitsForVehicle(build.vehicleId);
   const installed = new Set(build.upfitIds);
+
+  const [submitOpen, setSubmitOpen] = useState(false);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -210,15 +214,27 @@ export default function BuilderPanel({
       </div>
 
       <section className="sticky bottom-0 mt-auto border-t bg-background/95 p-5 backdrop-blur">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Your build
-        </h2>
-        <p className="mt-1 font-bold">{getVehicle(build.vehicleId)?.name}</p>
-        <p className="text-sm text-muted-foreground">
-          {build.upfitIds.length
-            ? nameList(build.upfitIds)
-            : "Stock vehicle, no upfits."}
-        </p>
+        <div className="flex flex-row gap-2 justify-between items-center">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Your build
+            </h2>
+            <p className="mt-1 font-bold">
+              {getVehicle(build.vehicleId)?.name}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {build.upfitIds.length
+                ? nameList(build.upfitIds)
+                : "Stock vehicle, no upfits."}
+            </p>
+          </div>
+          <Button onClick={() => setSubmitOpen(true)}>Submit New Build</Button>
+        </div>
+        <SubmitBuildDialog
+          build={build}
+          open={submitOpen}
+          onOpenChange={setSubmitOpen}
+        />
       </section>
     </div>
   );

@@ -85,7 +85,7 @@ export default function Scene({
       </Helmet>
       <Canvas camera={{ position: CAMERA_POSITION, fov: 30 }}>
         <FitToViewport />
-        <ambientLight intensity={0.5} />
+        <ambientLight intensity={1} />
         <directionalLight position={[10, 10, 5]} intensity={1} />
         <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
           <circleGeometry args={[4, 64]} />
