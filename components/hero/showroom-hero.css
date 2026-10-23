@@ -1,0 +1,345 @@
+/* Tokens: DESIGN.md §3. Layout: §4. */
+.sh-hero[data-theme="dark"] {
+  --hero-bg: #0a0b0d;
+  --hero-spot: #1d2938;
+  --hero-grid: #1c2836;
+  --hero-text: #f2f4f7;
+  --hero-muted: #a9b1bd;
+  --hero-subtle: #6f7e92;
+  --hero-eyebrow: #7cc4ff;
+  --hero-eyebrow-weight: 500;
+  --hero-accent: #3ea6ff;
+  --hero-on-accent: #04121f;
+  --chip-bg: #141a22;
+  --chip-border: #2a3644;
+  --chip-shadow: none;
+  --btn2-border: #3c4757;
+  --btn2-bg: transparent;
+}
+.sh-hero[data-theme="light"] {
+  --hero-bg: #e6eaf0;
+  --hero-spot: #ffffff;
+  --hero-grid: #d5dbe4;
+  --hero-text: #0e1620;
+  --hero-muted: #4e5869;
+  --hero-subtle: #5a6474;
+  --hero-eyebrow: #1a4fd8;
+  --hero-eyebrow-weight: 600;
+  --hero-accent: #1f5eff;
+  --hero-on-accent: #ffffff;
+  --chip-bg: #ffffff;
+  --chip-border: #d8dee7;
+  --chip-shadow: 0 6px 18px rgba(14, 22, 32, 0.08);
+  --btn2-border: #b9c2cf;
+  --btn2-bg: #ffffff;
+}
+
+.sh-hero {
+  --side: 96px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 80px 16px 40px;
+  color: var(--hero-text);
+  background: radial-gradient(
+    ellipse at 50% 62%,
+    var(--hero-spot) 0%,
+    var(--hero-bg) 70%
+  );
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+}
+
+/* Floor grid */
+.sh-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  clip-path: ellipse(44% 20% at 50% 77%);
+  stroke: var(--hero-grid);
+  stroke-width: 1;
+}
+.sh-grid line {
+  vector-effect: non-scaling-stroke;
+}
+
+/* Header strip */
+.sh-header {
+  position: absolute;
+  inset: 12px 24px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sh-logo {
+  display: block;
+  padding: 4px;
+  background: #1f5eff;
+}
+.sh-header nav {
+  display: none;
+  gap: 28px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.sh-header nav a {
+  color: var(--hero-muted);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.sh-header nav a:hover {
+  color: var(--hero-text);
+}
+
+/* Text */
+.sh-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.sh-eyebrow {
+  margin: 0;
+  font-size: 15px;
+  font-weight: var(--hero-eyebrow-weight);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hero-eyebrow);
+}
+.sh-text h1 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.sh-sub {
+  margin: 0;
+  max-width: 900px;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--hero-muted);
+}
+
+/* 3D stage */
+.sh-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  touch-action: pan-y;
+  cursor: grab;
+  border-radius: 12px;
+}
+.sh-stage:active {
+  cursor: grabbing;
+}
+.sh-stage:focus-visible {
+  outline: 3px solid var(--hero-accent);
+  outline-offset: 4px;
+}
+.sh-stage canvas {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.sh-stage[data-ready] canvas {
+  opacity: 1;
+}
+.sh-poster {
+  object-fit: contain;
+  transition: opacity 200ms ease;
+}
+.sh-stage[data-ready] .sh-poster {
+  opacity: 0;
+}
+
+.sh-hint {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hero-subtle);
+}
+
+/* Chips */
+.sh-chips {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+.sh-chip {
+  flex: none;
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 15px;
+  color: var(--hero-subtle);
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  box-shadow: var(--chip-shadow);
+}
+.sh-chip strong {
+  font-weight: 600;
+  color: var(--hero-text);
+}
+.sh-chip svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--hero-accent);
+}
+
+/* CTAs */
+.sh-ctas {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border-radius: 999px;
+  font-size: 18px;
+  text-decoration: none;
+}
+.sh-btn-primary {
+  padding: 0 30px;
+  font-weight: 700;
+  color: var(--hero-on-accent);
+  background: var(--hero-accent);
+}
+.sh-btn-secondary {
+  padding: 0 28px;
+  font-weight: 600;
+  color: var(--hero-text);
+  background: var(--btn2-bg);
+  border: 1px solid var(--btn2-border);
+}
+.sh-btn:focus-visible,
+.sh-header a:focus-visible {
+  outline: 3px solid var(--hero-accent);
+  outline-offset: 3px;
+}
+
+/* Flow order below 1024: stage, hint, chips, CTAs already follow DOM order. */
+
+/* ≥ 768: tablet */
+@media (min-width: 768px) {
+  .sh-header nav {
+    display: flex;
+  }
+  .sh-text h1 {
+    font-size: 56px;
+  }
+  .sh-sub {
+    font-size: 20px;
+  }
+  .sh-stage {
+    aspect-ratio: 1000 / 470;
+    max-width: 1000px;
+  }
+  .sh-chips {
+    flex-wrap: wrap;
+    justify-content: center;
+    overflow: visible;
+  }
+  .sh-ctas {
+    flex-direction: row;
+    justify-content: center;
+  }
+  .sh-grid {
+    clip-path: ellipse(44% 20% at 50% 77%);
+  }
+}
+@media (max-width: 767px) {
+  .sh-grid {
+    display: none;
+  }
+}
+
+/* ≥ 1024: absolute showroom layout, 1440×810 reference */
+@media (min-width: 1024px) {
+  .sh-hero {
+    --side: 32px;
+    display: block;
+    height: min(810px, 100svh);
+    min-height: 790px; /* keeps hint and CTAs from colliding on short viewports */
+    padding: 0;
+  }
+  .sh-text {
+    position: absolute;
+    top: 56px;
+    left: 50%;
+    width: min(900px, 100% - 64px);
+    translate: -50% 0;
+  }
+  .sh-text h1 {
+    font-size: 72px;
+  }
+  .sh-stage {
+    position: absolute;
+    top: 196px;
+    left: 50%;
+    width: 80%;
+    translate: -50% 0;
+  }
+  .sh-hint {
+    position: absolute;
+    top: 672px;
+    left: 0;
+    right: 0;
+    text-align: center;
+  }
+  .sh-chips {
+    display: contents;
+  }
+  .sh-chip {
+    position: absolute;
+  }
+  .sh-chip-1 {
+    left: var(--side);
+    top: 300px;
+  }
+  .sh-chip-2 {
+    right: var(--side);
+    top: 280px;
+  }
+  .sh-chip-3 {
+    right: calc(var(--side) + 24px);
+    top: 410px;
+  }
+  .sh-ctas {
+    position: absolute;
+    bottom: 40px;
+    left: 0;
+    right: 0;
+  }
+}
+@media (min-width: 1280px) {
+  .sh-hero {
+    --side: 96px;
+  }
+  .sh-stage {
+    width: 1000px;
+  }
+  .sh-chip-3 {
+    right: 120px;
+  }
+}
