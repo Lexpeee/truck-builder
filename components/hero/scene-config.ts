@@ -3,9 +3,9 @@ export type HeroTheme = "dark" | "light";
 /** Scene values from DESIGN.md §3 (3D scene) and §5. Keyed by theme. */
 export const SCENE_THEMES = {
   dark: {
-    disc: { color: "#10151C", roughness: 0.55, metalness: 0.4 },
-    ring: { color: "#3EA6FF", emissive: "#3EA6FF", emissiveIntensity: 1.4 },
-    tick: { color: "#1E3A57", emissive: "#1E3A57", emissiveIntensity: 0.6 },
+    disc: { color: "#9c9c9c", roughness: 0.55, metalness: 0.4 },
+    ring: { color: "#ffee02", emissive: "#1E3A57", emissiveIntensity: 1.4 },
+    tick: { color: "#ffee02", emissive: "#1E3A57", emissiveIntensity: 0.6 },
     hemi: { sky: "#DFE8F5", ground: "#1A1D22", intensity: 0.75 },
     key: { color: "#FFFFFF", intensity: 1.5 },
     rim: { color: "#9CC8FF", intensity: 0.7 },
@@ -13,9 +13,9 @@ export const SCENE_THEMES = {
     exposure: 1.05,
   },
   light: {
-    disc: { color: "#D6DCE5", roughness: 0.55, metalness: 0.15 },
-    ring: { color: "#1F5EFF", emissive: "#1F5EFF", emissiveIntensity: 0.5 },
-    tick: { color: "#A9B4C3", emissive: "#000000", emissiveIntensity: 0 },
+    disc: { color: "#c9c9c9", roughness: 0.55, metalness: 0.15 },
+    ring: { color: "#ffee02", emissive: "#1E3A57", emissiveIntensity: 0.5 },
+    tick: { color: "#ffee02", emissive: "#000000", emissiveIntensity: 0 },
     hemi: { sky: "#FFFFFF", ground: "#C4CCD8", intensity: 0.85 },
     key: { color: "#FFFFFF", intensity: 1.35 },
     rim: { color: "#DCE6FF", intensity: 0.55 },

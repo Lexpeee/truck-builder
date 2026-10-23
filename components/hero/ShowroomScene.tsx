@@ -17,7 +17,7 @@ import {
   type HeroTheme,
 } from "./scene-config";
 
-const TICK_COUNT = 36;
+const TICK_COUNT = 36*2;
 
 const defaultUrls = () =>
   [getVehicle(HERO_BUILD.vehicleId)!.fileName]
@@ -72,7 +72,7 @@ function CameraRig({ mobile }: { mobile: boolean }) {
   return null;
 }
 
-function Lights({ theme, mobile }: { theme: HeroTheme; mobile: boolean }) {
+export function Lights({ theme, mobile }: { theme: HeroTheme; mobile: boolean }) {
   const c = SCENE_THEMES[theme];
   const map = mobile ? SHADOW.mobileMap : SHADOW.desktopMap;
   return (
@@ -96,7 +96,7 @@ function Lights({ theme, mobile }: { theme: HeroTheme; mobile: boolean }) {
   );
 }
 
-function Turntable({ theme }: { theme: HeroTheme }) {
+export function Turntable({ theme }: { theme: HeroTheme }) {
   const c = SCENE_THEMES[theme];
   return (
     <>
@@ -105,28 +105,33 @@ function Turntable({ theme }: { theme: HeroTheme }) {
         <meshStandardMaterial {...c.disc} />
       </mesh>
       <mesh position={[0, DISC.height, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[DISC.radius - 0.05, 0.04, 12, 160]} />
+        {/* <torusGeometry args={[DISC.radius - 0.05, 0.04, 12, 160]} /> */}
         <meshStandardMaterial {...c.ring} />
       </mesh>
     </>
   );
 }
 
-function Ticks({ theme }: { theme: HeroTheme }) {
+export function Ticks({ theme }: { theme: HeroTheme }) {
   const c = SCENE_THEMES[theme].tick;
   return (
     <>
       {Array.from({ length: TICK_COUNT }, (_, i) => {
+        // console.log("TICK_COUNT", TICK_COUNT, "i", i);
+        const currentColor = i % 2 === 0 ? "#ffee02" : "#333333"; // Alternate colors for ticks
         const a = (i / TICK_COUNT) * Math.PI * 2;
-        const r = DISC.radius - 0.35;
+        const r = DISC.radius - 0.25;
         return (
           <mesh
             key={i}
             position={[Math.cos(a) * r, DISC.height + 0.005, Math.sin(a) * r]}
             rotation={[0, -a, 0]}
           >
-            <boxGeometry args={[0.28, 0.01, 0.05]} />
-            <meshStandardMaterial {...c} />
+            <boxGeometry args={[0.28, 0.01, 0.35]} />
+            <meshStandardMaterial {...{
+              ...c,
+              color: currentColor, // Use the alternating color
+            }} />
           </mesh>
         );
       })}

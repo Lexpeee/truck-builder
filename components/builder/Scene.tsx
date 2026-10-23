@@ -9,6 +9,7 @@ import {
 import { Canvas, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
+import { Lights, Ticks, Turntable } from "../hero/ShowroomScene";
 
 const Model = ({ item }: { item: Vehicle | Upfit }) => {
   const { scene } = useGLTF(`/models/${item.fileName}`);
@@ -78,37 +79,45 @@ export default function Scene({
 }) {
   const vehicle = getVehicle(vehicleId);
   const [ready, setReady] = useState(false);
+
+  const [isClicked, setIsClicked] = useState(false);
+
+  useEffect(() => {
+    setIsClicked(false);
+  }, [vehicleId]);
+  
   return (
     <>
       <Helmet>
         <title>{vehicle?.name || "Showroom"} | NWT Truck Builder</title>
       </Helmet>
-      <Canvas camera={{ position: CAMERA_POSITION, fov: 30 }}>
+      <Canvas camera={{ position: CAMERA_POSITION, fov: 30 }} shadows onClick={(e) => setIsClicked(true)}>
         <FitToViewport />
         <ambientLight intensity={1} />
         <directionalLight position={[10, 10, 5]} intensity={1} />
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <circleGeometry args={[4, 64]} />
-          <meshStandardMaterial
-            color="#cbd5e1"
-            roughness={0.6}
-            metalness={0.1}
-          />
-        </mesh>
         <Suspense fallback={null}>
-          <Environment files="/hdri/grasslands_sunset_4k.hdr" />
+          {/* <Environment files="/hdri/grasslands_sunset_4k.hdr" /> */}
           {vehicle && <Model item={vehicle} />}
           {upfitIds.map((id) => {
             const upfit = getUpfit(id);
             return upfit && <Model key={id} item={upfit} />;
           })}
+          <Lights theme="dark" mobile={false} />
+          <Turntable theme="light"/>
           <ReadySignal onChange={setReady} />
+          <Ticks theme="light"/>
         </Suspense>
         <OrbitControls
           makeDefault
+          enableDamping
+          enableZoom
+          autoRotate={!isClicked}
+          autoRotateSpeed={1}
+          minZoom={1}
+          maxZoom={1}
           enablePan={false}
           minPolarAngle={Math.PI / 4}
-          maxPolarAngle={(3 * Math.PI) / 4}
+          maxPolarAngle={Math.PI / 2.5}
         />
       </Canvas>
       {!ready && <LoadingOverlay />}
