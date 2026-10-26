@@ -1,15 +1,29 @@
 "use client";
 import { getUpfit, getVehicle, type Upfit, type Vehicle } from "@/lib/catalog";
 import {
+  AdaptiveDpr,
+  ContactShadows,
+  Detailed,
   Environment,
+  Lightformer,
   OrbitControls,
+  PerformanceMonitor,
   useGLTF,
   useProgress,
 } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Helmet } from "react-helmet-async";
-import { Lights, Ticks, Turntable } from "../hero/ShowroomScene";
+import { MAX_DPR } from "../hero/scene-config";
+import { FrameCap, Lights, Ticks, Turntable } from "../hero/ShowroomScene";
 
 const Model = ({ item }: { item: Vehicle | Upfit }) => {
   const { scene } = useGLTF(`/models/${item.fileName}`);
@@ -35,6 +49,23 @@ const FitToViewport = () => {
     camera.position.setLength(base * Math.max(1, FIT_ASPECT / aspect));
   }, [camera, aspect]);
   return null;
+};
+
+/** Orbit speed in rad/s (OrbitControls' autoRotateSpeed 1: one turn a minute). */
+const ORBIT_RATE = (2 * Math.PI) / 60;
+
+/**
+ * OrbitControls' own autoRotate re-invalidates every frame, which would run
+ * at the display rate. Drive the orbit from the 30 fps FrameCap instead.
+ */
+const AutoRotate = ({ enabled }: { enabled: boolean }) => {
+  const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
+  const onTick = useCallback(
+    (dt: number) =>
+      controls?.setAzimuthalAngle(controls.getAzimuthalAngle() - ORBIT_RATE * dt),
+    [controls],
+  );
+  return <FrameCap enabled={enabled && !!controls} onTick={onTick} />;
 };
 
 /**
@@ -93,21 +124,59 @@ export default function Scene({
       </Helmet>
       <Canvas
         frameloop="demand"
+        dpr={[1, MAX_DPR]}
         camera={{ position: CAMERA_POSITION, fov: 30 }}
         shadows
         onClick={(e) => setIsClicked(true)}
       >
+        <AdaptiveDpr />
+        <PerformanceMonitor />
+        <ContactShadows frames={1} />
         <FitToViewport />
+        <AutoRotate enabled={!isClicked} />
         <ambientLight intensity={1} />
         <directionalLight position={[10, 10, 5]} intensity={1} />
         <Suspense fallback={null}>
           {/* <Environment files="/hdri/grasslands_sunset_4k.hdr" /> */}
+          <Environment resolution={256} frames={1}>
+            {/* overhead softbox: long highlight along the roof and service body */}
+            <Lightformer
+              form="rect"
+              intensity={3}
+              position={[0, 6, 0]}
+              rotation-x={Math.PI / 2}
+              scale={[12, 2, 1]}
+            />
+            {/* side strips: highlight lines along the doors */}
+            <Lightformer
+              form="rect"
+              intensity={2}
+              position={[-6, 2, 0]}
+              rotation-y={Math.PI / 2}
+              scale={[10, 1.2, 1]}
+            />
+            <Lightformer
+              form="rect"
+              intensity={2}
+              position={[6, 2, 0]}
+              rotation-y={-Math.PI / 2}
+              scale={[10, 1.2, 1]}
+            />
+            {/* cool rim from behind (dark theme): pick out the silhouette */}
+            <Lightformer
+              form="ring"
+              color="#3EA6FF"
+              intensity={1.5}
+              position={[-5, 3, -6]}
+              scale={3}
+            />
+          </Environment>
           {vehicle && <Model item={vehicle} />}
           {upfitIds.map((id) => {
             const upfit = getUpfit(id);
             return upfit && <Model key={id} item={upfit} />;
           })}
-          <Lights theme="dark" mobile={false} />
+          <Lights theme="dark" />
           <Turntable theme="light" />
           <ReadySignal onChange={setReady} />
           <Ticks theme="light" />
@@ -116,8 +185,6 @@ export default function Scene({
           makeDefault
           enableDamping
           enableZoom
-          autoRotate={!isClicked}
-          autoRotateSpeed={1}
           minZoom={1}
           maxZoom={1}
           enablePan={false}

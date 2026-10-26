@@ -1,13 +1,27 @@
 "use client";
 import { getUpfit, getVehicle } from "@/lib/catalog";
-import { useGLTF } from "@react-three/drei";
+import {
+  AdaptiveDpr,
+  ContactShadows,
+  PerformanceMonitor,
+  useGLTF,
+} from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as THREE from "three";
 import {
   CAMERA,
   DISC,
+  AUTO_ROTATE_FPS,
   FILL_POSITION,
+  MAX_DPR,
   HERO_BUILD,
   KEY_POSITION,
   MOTION,
@@ -17,7 +31,7 @@ import {
   type HeroTheme,
 } from "./scene-config";
 
-const TICK_COUNT = 36*2;
+const TICK_COUNT = 36 * 2;
 
 const defaultUrls = () =>
   [getVehicle(HERO_BUILD.vehicleId)!.fileName]
@@ -28,9 +42,9 @@ type Props = {
   theme: HeroTheme;
   /** Optional GLB URL replacing the default catalog build. */
   model?: string;
-  /** Narrow (<768px) layout: pulled-back camera and a smaller shadow map. */
+  /** Narrow (<768px) layout: pulled-back camera. */
   mobile: boolean;
-  /** False pauses the render loop (off-screen or hidden tab). */
+  /** False stops rendering (off-screen or hidden tab). */
   active: boolean;
   /** Element that receives drag and arrow-key input. */
   inputTarget: HTMLElement | null;
@@ -57,8 +71,36 @@ class Spin {
   }
   step(delta: number) {
     const idle = performance.now() - this.lastInput > MOTION.resumeAfterMs;
-    if (!this.reduced && idle) this.angle += MOTION.autoRotate * Math.min(delta, 0.1);
+    if (!this.reduced && idle)
+      this.angle += MOTION.autoRotate * Math.min(delta, 0.1);
   }
+}
+
+/**
+ * Canvases render on demand. While `enabled`, this requests frames at
+ * AUTO_ROTATE_FPS and reports the elapsed seconds, so auto-rotate never takes
+ * more GPU than a video call can spare.
+ */
+export function FrameCap({
+  enabled,
+  onTick,
+}: {
+  enabled: boolean;
+  onTick?: (dt: number) => void;
+}) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (!enabled) return;
+    let last = performance.now();
+    const id = setInterval(() => {
+      const now = performance.now();
+      onTick?.((now - last) / 1000);
+      last = now;
+      invalidate();
+    }, 1000 / AUTO_ROTATE_FPS);
+    return () => clearInterval(id);
+  }, [enabled, onTick, invalidate]);
+  return null;
 }
 
 function CameraRig({ mobile }: { mobile: boolean }) {
@@ -72,9 +114,9 @@ function CameraRig({ mobile }: { mobile: boolean }) {
   return null;
 }
 
-export function Lights({ theme, mobile }: { theme: HeroTheme; mobile: boolean }) {
+export function Lights({ theme }: { theme: HeroTheme }) {
   const c = SCENE_THEMES[theme];
-  const map = mobile ? SHADOW.mobileMap : SHADOW.desktopMap;
+  const map = SHADOW.map;
   return (
     <>
       <hemisphereLight args={[c.hemi.sky, c.hemi.ground, c.hemi.intensity]} />
@@ -90,8 +132,16 @@ export function Lights({ theme, mobile }: { theme: HeroTheme; mobile: boolean })
         shadow-camera-bottom={-SHADOW.extent}
         shadow-bias={SHADOW.bias}
       />
-      <directionalLight color={c.rim.color} intensity={c.rim.intensity} position={RIM_POSITION} />
-      <directionalLight color={c.fill.color} intensity={c.fill.intensity} position={FILL_POSITION} />
+      <directionalLight
+        color={c.rim.color}
+        intensity={c.rim.intensity}
+        position={RIM_POSITION}
+      />
+      <directionalLight
+        color={c.fill.color}
+        intensity={c.fill.intensity}
+        position={FILL_POSITION}
+      />
     </>
   );
 }
@@ -128,10 +178,12 @@ export function Ticks({ theme }: { theme: HeroTheme }) {
             rotation={[0, -a, 0]}
           >
             <boxGeometry args={[0.28, 0.01, 0.35]} />
-            <meshStandardMaterial {...{
-              ...c,
-              color: currentColor, // Use the alternating color
-            }} />
+            <meshStandardMaterial
+              {...{
+                ...c,
+                color: currentColor, // Use the alternating color
+              }}
+            />
           </mesh>
         );
       })}
@@ -144,7 +196,9 @@ function disposeObject(root: THREE.Object3D) {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     mesh.geometry.dispose();
-    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+    for (const m of Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material]) {
       for (const v of Object.values(m)) {
         if (v instanceof THREE.Texture) v.dispose();
       }
@@ -236,10 +290,15 @@ export default function ShowroomScene({
 }: Props) {
   const urls = useMemo(() => (model ? [model] : defaultUrls()), [model]);
   const [spin] = useState(() => new Spin());
+  const [reduced, setReduced] = useState(false);
+  const invalidateRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => spin.setReducedMotion(mq.matches);
+    const sync = () => {
+      spin.setReducedMotion(mq.matches);
+      setReduced(mq.matches);
+    };
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
@@ -260,6 +319,7 @@ export default function ShowroomScene({
     const move = (e: PointerEvent) => {
       if (!dragging) return;
       spin.nudge((e.clientX - lastX) * MOTION.dragSensitivity);
+      invalidateRef.current();
       lastX = e.clientX;
     };
     const up = (e: PointerEvent) => {
@@ -272,6 +332,7 @@ export default function ShowroomScene({
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       e.preventDefault();
       spin.nudge((e.key === "ArrowRight" ? 1 : -1) * MOTION.keyStep);
+      invalidateRef.current();
     };
     el.addEventListener("pointerdown", down);
     el.addEventListener("pointermove", move);
@@ -291,7 +352,10 @@ export default function ShowroomScene({
     <Canvas
       frameloop="demand"
       shadows="soft"
-      dpr={[1, 2]}
+      dpr={[1, MAX_DPR]}
+      onCreated={({ invalidate }) => {
+        invalidateRef.current = invalidate;
+      }}
       gl={{
         antialias: true,
         alpha: true,
@@ -301,8 +365,12 @@ export default function ShowroomScene({
       camera={{ position: [10, 5, 5], fov: 30 }}
       style={{ position: "absolute", inset: 0 }}
     >
+      <AdaptiveDpr />
+      <PerformanceMonitor />
+      <ContactShadows frames={1} />
       <CameraRig mobile={mobile} />
-      <Lights theme={theme} mobile={mobile} />
+      <FrameCap enabled={active && !still && !reduced} />
+      <Lights theme={theme} />
       <Turntable theme={theme} />
       <Suspense fallback={null}>
         <Truck urls={urls} theme={theme} spin={spin} still={still} />

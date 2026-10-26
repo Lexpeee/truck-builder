@@ -129,9 +129,9 @@ Layers, back to front:
 ### Renderer
 
 - WebGL, `antialias: true`, `alpha: true` (page background shows through)
-- Pixel ratio `min(devicePixelRatio, 2)`
 - sRGB output, ACES Filmic tone mapping
-- Soft shadows (PCFSoft), key-light shadow map 2048 (1024 on mobile), shadow camera ±7, bias −0.0005
+- Pixel ratio `min(devicePixelRatio, 1.5)`
+- Soft shadows (PCFSoft), key-light shadow map 1024, shadow camera ±7, bias −0.0005
 
 ### Model
 
@@ -160,6 +160,11 @@ The hero is the LCP element. 3D must never block first paint.
 2. Lazy-load three.js and the scene with dynamic import (`ssr: false`) after the page is interactive.
 3. Cross-fade from poster to live canvas (200ms) once the first frame renders.
 4. Pause the render loop when the hero is off-screen (IntersectionObserver) or the tab is hidden.
+4a. **Share the GPU.** The page often runs during a video call: sales demos over Google Meet or Zoom, with camera, screen-share encoding and background blur all on the GPU. So:
+    - Cap rendering at **30 fps** while auto-rotating. Render on demand only (on drag or prop change) when it isn't.
+    - Pixel ratio cap **1.5** (not 2). Key-light shadow map **1024** (not 2048).
+    - Only one live 3D canvas per page. Any other 3D views show their poster until the user interacts.
+    - Test it: run the hero during a Meet call with background blur on. The camera must not freeze.
 5. If WebGL is unavailable or fails, keep the poster. Never show an empty box.
 6. Budget: hero JS chunk ≤ 200 KB gzipped (three tree-shaken), GLB ≤ 3 MB when the real model is used.
 
