@@ -289,8 +289,8 @@ export default function ShowroomScene({
 
   return (
     <Canvas
+      frameloop="demand"
       shadows="soft"
-      frameloop={active ? "always" : "never"}
       dpr={[1, 2]}
       gl={{
         antialias: true,
@@ -298,7 +298,7 @@ export default function ShowroomScene({
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: SCENE_THEMES[theme].exposure,
       }}
-      camera={{ fov: CAMERA.fov, near: 0.1, far: 100 }}
+      camera={{ position: [10, 5, 5], fov: 30 }}
       style={{ position: "absolute", inset: 0 }}
     >
       <CameraRig mobile={mobile} />

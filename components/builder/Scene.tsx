@@ -85,13 +85,18 @@ export default function Scene({
   useEffect(() => {
     setIsClicked(false);
   }, [vehicleId]);
-  
+
   return (
     <>
       <Helmet>
         <title>{vehicle?.name || "Showroom"} | NWT Truck Builder</title>
       </Helmet>
-      <Canvas camera={{ position: CAMERA_POSITION, fov: 30 }} shadows onClick={(e) => setIsClicked(true)}>
+      <Canvas
+        frameloop="demand"
+        camera={{ position: CAMERA_POSITION, fov: 30 }}
+        shadows
+        onClick={(e) => setIsClicked(true)}
+      >
         <FitToViewport />
         <ambientLight intensity={1} />
         <directionalLight position={[10, 10, 5]} intensity={1} />
@@ -103,9 +108,9 @@ export default function Scene({
             return upfit && <Model key={id} item={upfit} />;
           })}
           <Lights theme="dark" mobile={false} />
-          <Turntable theme="light"/>
+          <Turntable theme="light" />
           <ReadySignal onChange={setReady} />
-          <Ticks theme="light"/>
+          <Ticks theme="light" />
         </Suspense>
         <OrbitControls
           makeDefault
