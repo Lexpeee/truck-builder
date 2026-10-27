@@ -30,10 +30,3 @@ export type BuildSubmission = {
   build: { vehicle: string; upfits: string[] };
   customer: CustomerDetails;
 };
-
-/** Sends a customer's build to the sales webhook. */
-export async function submitBuild(submission: BuildSubmission) {
-  // TODO: replace with `await axios.post(WEBHOOK_URL, submission)` once the
-  // webhook exists. Callers only depend on this promise settling.
-  console.log(submission);
-}

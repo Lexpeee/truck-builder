@@ -20,8 +20,8 @@ import {
 } from "@/lib/catalog";
 import SubmitBuildDialog from "@/components/builder/SubmitBuildDialog";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Info, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { ChevronDown, CircleCheck, Info, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /** Radio value for "no upfit installed" in an exclusive category. */
 const NONE = "__none__";
@@ -88,6 +88,9 @@ function Field({
 
 const itemClassName = "rounded-lg py-2";
 
+/** How long the "quote sent" confirmation stays visible. */
+const QUOTE_SENT_MS = 8000;
+
 export default function BuilderPanel() {
   const build = useBuilderStore((s) => s.build);
   const notices = useBuilderStore((s) => s.notices);
@@ -98,6 +101,13 @@ export default function BuilderPanel() {
   const installed = new Set(build.upfitIds);
 
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [quoteSent, setQuoteSent] = useState(false);
+
+  useEffect(() => {
+    if (!quoteSent) return;
+    const id = setTimeout(() => setQuoteSent(false), QUOTE_SENT_MS);
+    return () => clearTimeout(id);
+  }, [quoteSent]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -208,6 +218,21 @@ export default function BuilderPanel() {
       </div>
 
       <section className="sticky bottom-0 mt-auto border-t bg-background/95 p-5 backdrop-blur">
+        {quoteSent && (
+          <Alert role="status" className="mb-4 border-primary/30 bg-primary/5 pr-10">
+            <CircleCheck className="text-primary" />
+            <AlertDescription>
+              Quote request sent. Our team will be in touch.
+            </AlertDescription>
+            <button
+              onClick={() => setQuoteSent(false)}
+              aria-label="Dismiss"
+              className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </Alert>
+        )}
         <div className="flex flex-row gap-2 justify-between items-center">
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -224,7 +249,11 @@ export default function BuilderPanel() {
           </div>
           <Button onClick={() => setSubmitOpen(true)}>Submit New Build</Button>
         </div>
-        <SubmitBuildDialog open={submitOpen} onOpenChange={setSubmitOpen} />
+        <SubmitBuildDialog
+          open={submitOpen}
+          onOpenChange={setSubmitOpen}
+          onSubmitted={() => setQuoteSent(true)}
+        />
       </section>
     </div>
   );

@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import type { Build } from "@/lib/builder";
 import { useBuilderStore } from "@/lib/builder-store";
 import { getCategory, getUpfit, getVehicle } from "@/lib/catalog";
-import { submitBuild, type CustomerDetails } from "@/lib/submit-build";
+import { submitBuild } from "@/lib/submit-build.action";
+import type { CustomerDetails } from "@/lib/submit-build";
 import { useState, type FormEvent } from "react";
 
 type FieldSpec = {
@@ -123,30 +124,23 @@ function BuildSummary({ build }: { build: Build }) {
 }
 
 /** Mounted only while the dialog is open, so it starts fresh every time. */
-function SubmitBuildForm({ onClose }: { onClose: () => void }) {
+function SubmitBuildForm({
+  onClose,
+  onSubmitted,
+}: {
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
   const build = useBuilderStore((s) => s.build);
-  const [status, setStatus] = useState<"idle" | "submitting" | "done">("idle");
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
-
-  if (status === "done") {
-    return (
-      <div className="mt-6">
-        <p className="text-sm text-muted-foreground">
-          Thanks, we received your build. Our team will be in touch.
-        </p>
-        <Button className="mt-6 h-10 px-5" onClick={onClose}>
-          Close
-        </Button>
-      </div>
-    );
-  }
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const customer = Object.fromEntries(
       new FormData(e.currentTarget),
     ) as CustomerDetails;
-    // setStatus("submitting");
+    setSubmitting(true);
     setError(false);
     try {
       await submitBuild({
@@ -159,10 +153,10 @@ function SubmitBuildForm({ onClose }: { onClose: () => void }) {
           deliveryAddress: `${customer.addressLine1}${customer.addressLine2 ? `, ${customer.addressLine2}` : ""}, ${customer.city}, ${customer.state} ${customer.zipCode}, ${customer.country}`,  
         },
       });
-      // setStatus("done");
+      onSubmitted();
     } catch {
       setError(true);
-      // setStatus("idle");
+      setSubmitting(false);
     }
   };
 
@@ -212,9 +206,9 @@ function SubmitBuildForm({ onClose }: { onClose: () => void }) {
         <Button
           type="submit"
           className="h-10 px-5"
-          disabled={status === "submitting"}
+          disabled={submitting}
         >
-          {status === "submitting" ? "Submitting…" : "Submit build"}
+          {submitting ? "Submitting…" : "Submit build"}
         </Button>
       </div>
     </form>
@@ -224,9 +218,12 @@ function SubmitBuildForm({ onClose }: { onClose: () => void }) {
 export default function SubmitBuildDialog({
   open,
   onOpenChange,
+  onSubmitted,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called after the quote was sent and the dialog closed. */
+  onSubmitted: () => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -235,7 +232,13 @@ export default function SubmitBuildDialog({
         <DialogDescription>
           Review your build and tell us how to reach you.
         </DialogDescription>
-        <SubmitBuildForm onClose={() => onOpenChange(false)} />
+        <SubmitBuildForm
+          onClose={() => onOpenChange(false)}
+          onSubmitted={() => {
+            onOpenChange(false);
+            onSubmitted();
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
