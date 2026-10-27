@@ -30,3 +30,13 @@ export type BuildSubmission = {
   build: { vehicle: string; upfits: string[] };
   customer: CustomerDetails;
 };
+
+/** Sends a customer's build to our quote endpoint, which forwards it to the sales webhook. */
+export async function submitBuild(submission: BuildSubmission) {
+  const res = await fetch("/api/quote", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(submission),
+  });
+  if (!res.ok) throw new Error("Quote request failed");
+}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import axios from "axios";
 
 const archivo = Archivo({
   variable: "--font-archivo",
@@ -22,6 +23,8 @@ export const metadata: Metadata = {
   title: "Showroom | NWT Truck Builder",
   description: "A 3D truck builder for newworktrucks.com",
 };
+
+axios.defaults.baseURL = process.env.WEBHOOK_ROOT_URL;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

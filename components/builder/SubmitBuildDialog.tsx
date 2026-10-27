@@ -11,8 +11,7 @@ import { Input } from "@/components/ui/input";
 import type { Build } from "@/lib/builder";
 import { useBuilderStore } from "@/lib/builder-store";
 import { getCategory, getUpfit, getVehicle } from "@/lib/catalog";
-import { submitBuild } from "@/lib/submit-build.action";
-import type { CustomerDetails } from "@/lib/submit-build";
+import { submitBuild, type CustomerDetails } from "@/lib/submit-build";
 import { useState, type FormEvent } from "react";
 
 type FieldSpec = {
