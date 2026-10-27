@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { CircleCheck } from "lucide-react";
 import HeroStage from "./HeroStage";
-import type { HeroTheme } from "./scene-config";
+import type { HeroTheme } from "../showroom/scene-config";
 import "./showroom-hero.css";
 
 // Chips describe the build in HERO_BUILD (scene-config.ts); keep them in sync.

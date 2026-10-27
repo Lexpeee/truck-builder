@@ -8,10 +8,12 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { HeroTheme } from "./scene-config";
+import { HERO_BUILD, type HeroTheme } from "../showroom/scene-config";
 
 // three.js and the scene are fetched only after hydration (see mount effect).
-const ShowroomScene = dynamic(() => import("./ShowroomScene"), { ssr: false });
+const ShowroomScene = dynamic(() => import("../showroom/ShowroomScene"), {
+  ssr: false,
+});
 
 const MOBILE_QUERY = "(max-width: 767px)";
 const subscribeMobile = (cb: () => void) => {
@@ -77,7 +79,7 @@ export default function HeroStage({
     };
   }, [stage]);
 
-  const onReady = useCallback(() => setReady(true), []);
+  const onReady = useCallback((r: boolean) => r && setReady(true), []);
 
   return (
     <div
@@ -92,6 +94,8 @@ export default function HeroStage({
       {mounted && (
         <SceneBoundary>
           <ShowroomScene
+            {...HERO_BUILD}
+            interaction="turntable"
             theme={theme}
             model={model}
             mobile={mobile}

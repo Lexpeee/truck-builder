@@ -1,15 +1,19 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useState } from "react";
-import type { HeroTheme } from "@/components/hero/scene-config";
+import { useCallback, useState } from "react";
+import { HERO_BUILD, type HeroTheme } from "@/components/showroom/scene-config";
 
-const ShowroomScene = dynamic(() => import("@/components/hero/ShowroomScene"), {
+const ShowroomScene = dynamic(() => import("@/components/showroom/ShowroomScene"), {
   ssr: false,
 });
 
 export default function PosterStage({ theme }: { theme: HeroTheme }) {
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   const [ready, setReady] = useState(false);
+  const onReady = useCallback(
+    (r: boolean) => r && setTimeout(() => setReady(true), 300),
+    [],
+  );
   return (
     <div
       ref={setEl}
@@ -19,12 +23,14 @@ export default function PosterStage({ theme }: { theme: HeroTheme }) {
       <style>{"html,body{background:transparent!important}"}</style>
       {el && (
         <ShowroomScene
+          {...HERO_BUILD}
+          interaction="turntable"
           theme={theme}
           mobile={false}
           active
           still
           inputTarget={null}
-          onReady={() => setTimeout(() => setReady(true), 300)}
+          onReady={onReady}
         />
       )}
     </div>

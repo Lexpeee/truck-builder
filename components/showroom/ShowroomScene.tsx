@@ -3,12 +3,16 @@ import { getUpfit, getVehicle } from "@/lib/catalog";
 import {
   AdaptiveDpr,
   ContactShadows,
+  Environment,
+  Lightformer,
+  OrbitControls,
   PerformanceMonitor,
   useGLTF,
 } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -16,14 +20,19 @@ import {
   useState,
 } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { getRenderBudget } from "@/lib/render-budget";
-import { FrameCap, RenderGate } from "../three/render-loop";
+import RenderStats, { statsEnabled } from "../three/RenderStats";
+import {
+  FrameCap,
+  FrameRateIndependentDamping,
+  RenderGate,
+} from "../three/render-loop";
 import {
   CAMERA,
   DISC,
   AUTO_ROTATE_FPS,
   FILL_POSITION,
-  HERO_BUILD,
   KEY_POSITION,
   MOTION,
   RIM_POSITION,
@@ -34,24 +43,37 @@ import {
 
 const TICK_COUNT = 36 * 2;
 
-const defaultUrls = () =>
-  [getVehicle(HERO_BUILD.vehicleId)!.fileName]
-    .concat(HERO_BUILD.upfitIds.map((id) => getUpfit(id)!.fileName))
-    .map((f) => `/models/${f}`);
+type Part = { url: string; position?: [number, number, number] };
+
+const partFor = (item: { fileName: string; position?: [number, number, number] }): Part => ({
+  url: `/models/${item.fileName}`,
+  position: item.position,
+});
 
 type Props = {
-  theme: HeroTheme;
-  /** Optional GLB URL replacing the default catalog build. */
+  /** The vehicle and its installed upfits, rendered in catalog order. */
+  vehicleId: string;
+  upfitIds: string[];
+  /** Optional GLB URL replacing the catalog build. */
   model?: string;
-  /** Narrow (<768px) layout: pulled-back camera. */
-  mobile: boolean;
+  theme: HeroTheme;
+  /** Lighting theme when it differs from the disc and ticks. */
+  lightsTheme?: HeroTheme;
+  /**
+   * "turntable": fixed camera, the model spins on the disc (drag / arrow keys).
+   * "orbit": free OrbitControls around a stationary model.
+   */
+  interaction: "turntable" | "orbit";
+  /** Narrow (<768px) layout: pulled-back camera. Turntable only. */
+  mobile?: boolean;
   /** False stops rendering (off-screen or hidden tab). */
-  active: boolean;
-  /** Element that receives drag and arrow-key input. */
-  inputTarget: HTMLElement | null;
+  active?: boolean;
+  /** Element that receives drag and arrow-key input. Turntable only. */
+  inputTarget?: HTMLElement | null;
   /** Poster rendering: hold the initial rotation. */
   still?: boolean;
-  onReady: () => void;
+  /** True after the first frame with every model shown; false while loading. */
+  onReady: (ready: boolean) => void;
 };
 
 /** Turntable angle plus the idle/auto-rotate rules. Mutated outside React's render. */
@@ -141,7 +163,6 @@ export function Ticks({ theme }: { theme: HeroTheme }) {
   return (
     <>
       {Array.from({ length: TICK_COUNT }, (_, i) => {
-        // console.log("TICK_COUNT", TICK_COUNT, "i", i);
         const currentColor = i % 2 === 0 ? "#ffee02" : "#333333"; // Alternate colors for ticks
         const a = (i / TICK_COUNT) * Math.PI * 2;
         const r = DISC.radius - 0.25;
@@ -181,52 +202,51 @@ function disposeObject(root: THREE.Object3D) {
   });
 }
 
-/** Loads the GLBs, sits them on the disc and spins them with the ticks. */
+const Model = ({ url, position }: Part) => {
+  const { scene } = useGLTF(url);
+  // Clone so the same GLB can be re-mounted without stealing the cached scene.
+  const object = useMemo(() => {
+    const o = scene.clone(true);
+    o.traverse((c) => {
+      const m = c as THREE.Mesh;
+      if (m.isMesh) m.castShadow = m.receiveShadow = true;
+    });
+    return o;
+  }, [scene]);
+  useEffect(() => () => disposeObject(object), [object]);
+  return <primitive object={object} position={position} />;
+};
+
+/** Sits the parts on the disc with the ticks; the turntable also spins them. */
 function Truck({
-  urls,
+  parts,
   theme,
   spin,
   still,
 }: {
-  urls: string[];
+  parts: Part[];
   theme: HeroTheme;
-  spin: Spin;
+  /** Present for the turntable: centers the parts and rotates the group. */
+  spin?: Spin;
   still: boolean;
 }) {
-  const gltfs = useGLTF(urls) as unknown as { scene: THREE.Object3D }[];
-  const parts = useMemo(() => {
-    const objs = gltfs.map((g) => g.scene.clone(true));
-    objs.forEach((o) =>
-      o.traverse((c) => {
-        const m = c as THREE.Mesh;
-        if (m.isMesh) m.castShadow = m.receiveShadow = true;
-      }),
-    );
-    return objs;
-  }, [gltfs]);
-
   const spinner = useRef<THREE.Group>(null);
   const truck = useRef<THREE.Group>(null);
+  const key = parts.map((p) => p.url).join("|");
 
-  // Center on the disc and rest the lowest point on its top face.
+  // Center on the disc and rest the lowest point on its top face. Re-runs when
+  // the parts change or the Suspense boundary reveals them again.
   useLayoutEffect(() => {
+    if (!spin) return;
     const g = truck.current!;
     g.position.set(0, 0, 0);
     const box = new THREE.Box3().setFromObject(g);
     const center = box.getCenter(new THREE.Vector3());
     g.position.set(-center.x, DISC.height - box.min.y, -center.z);
-  }, [parts]);
-
-  // GLTF cache and clones share GPU resources; free them with the scene.
-  useEffect(
-    () => () => {
-      parts.forEach(disposeObject);
-      useGLTF.clear(urls);
-    },
-    [parts, urls],
-  );
+  }, [spin, key]);
 
   useFrame((_, delta) => {
+    if (!spin) return;
     if (!still) spin.step(delta);
     spinner.current!.rotation.y = spin.angle;
   });
@@ -234,8 +254,8 @@ function Truck({
   return (
     <group ref={spinner}>
       <group ref={truck}>
-        {parts.map((p, i) => (
-          <primitive key={i} object={p} />
+        {parts.map((p) => (
+          <Model key={p.url} {...p} />
         ))}
       </group>
       <Ticks theme={theme} />
@@ -243,30 +263,139 @@ function Truck({
   );
 }
 
-function FirstFrame({ onReady }: { onReady: () => void }) {
+/**
+ * Mounted inside the models' Suspense boundary, so it only reports ready once
+ * every model is loaded and a frame has been drawn. Layout effects are cleaned
+ * up when the boundary suspends again (e.g. on a vehicle change).
+ */
+function ReadySignal({ onReady }: { onReady: (ready: boolean) => void }) {
   const done = useRef(false);
+  useLayoutEffect(() => {
+    done.current = false;
+    return () => onReady(false);
+  }, [onReady]);
   useFrame(() => {
     if (done.current) return;
     done.current = true;
-    onReady();
+    onReady(true);
   });
   return null;
 }
 
+const ORBIT_CAMERA: [number, number, number] = [10, 5, 5];
+/** Narrowest aspect ratio at which the whole truck fits at the base distance. */
+const FIT_ASPECT = 1.5;
+
+/**
+ * The camera's field of view is vertical, so a tall, narrow viewport (a phone
+ * in portrait) crops the truck's length. Pull the camera back to compensate.
+ */
+function FitToViewport() {
+  const camera = useThree((s) => s.camera);
+  const aspect = useThree((s) => s.size.width / s.size.height);
+  useEffect(() => {
+    const base = Math.hypot(...ORBIT_CAMERA);
+    camera.position.setLength(base * Math.max(1, FIT_ASPECT / aspect));
+  }, [camera, aspect]);
+  return null;
+}
+
+/** Orbit speed in rad/s (OrbitControls' autoRotateSpeed 1: one turn a minute). */
+const ORBIT_RATE = (2 * Math.PI) / 60;
+
+/**
+ * OrbitControls' own autoRotate re-invalidates every frame, which would run
+ * at the display rate. Drive the orbit from the auto-rotate FrameCap instead.
+ */
+function AutoRotate({ enabled }: { enabled: boolean }) {
+  const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
+  const onTick = useCallback(
+    (dt: number) =>
+      controls?.setAzimuthalAngle(controls.getAzimuthalAngle() - ORBIT_RATE * dt),
+    [controls],
+  );
+  return (
+    <FrameCap enabled={enabled && !!controls} fps={AUTO_ROTATE_FPS} onTick={onTick} />
+  );
+}
+
+/** Studio reflections and fill for the orbit view. */
+function StudioEnvironment() {
+  return (
+    <>
+      <ambientLight intensity={1} />
+      <directionalLight position={[10, 10, 5]} intensity={1} />
+      <Environment resolution={256} frames={1}>
+        {/* overhead softbox: long highlight along the roof and service body */}
+        <Lightformer
+          form="rect"
+          intensity={3}
+          position={[0, 6, 0]}
+          rotation-x={Math.PI / 2}
+          scale={[12, 2, 1]}
+        />
+        {/* side strips: highlight lines along the doors */}
+        <Lightformer
+          form="rect"
+          intensity={2}
+          position={[-6, 2, 0]}
+          rotation-y={Math.PI / 2}
+          scale={[10, 1.2, 1]}
+        />
+        <Lightformer
+          form="rect"
+          intensity={2}
+          position={[6, 2, 0]}
+          rotation-y={-Math.PI / 2}
+          scale={[10, 1.2, 1]}
+        />
+        {/* cool rim from behind: pick out the silhouette */}
+        <Lightformer
+          form="ring"
+          color="#3EA6FF"
+          intensity={1.5}
+          position={[-5, 3, -6]}
+          scale={3}
+        />
+      </Environment>
+    </>
+  );
+}
+
 export default function ShowroomScene({
-  theme,
+  vehicleId,
+  upfitIds,
   model,
-  mobile,
-  active,
-  inputTarget,
+  theme,
+  lightsTheme = theme,
+  interaction,
+  mobile = false,
+  active = true,
+  inputTarget = null,
   still = false,
   onReady,
 }: Props) {
-  const urls = useMemo(() => (model ? [model] : defaultUrls()), [model]);
+  const turntable = interaction === "turntable";
+  const parts = useMemo<Part[]>(() => {
+    if (model) return [{ url: model }];
+    const vehicle = getVehicle(vehicleId);
+    return [vehicle, ...upfitIds.map(getUpfit)]
+      .filter((i) => i !== undefined)
+      .map(partFor);
+  }, [model, vehicleId, upfitIds]);
   const [spin] = useState(() => new Spin());
   const [reduced, setReduced] = useState(false);
+  // Orbit auto-rotate stops on click and resumes for the next vehicle.
+  const [stoppedFor, setStoppedFor] = useState<string | null>(null);
   const [budget] = useState(getRenderBudget);
   const invalidateRef = useRef<() => void>(() => {});
+
+  // Free the GLB cache with the scene.
+  const urlsRef = useRef<string[]>([]);
+  useEffect(() => {
+    urlsRef.current = parts.map((p) => p.url);
+  }, [parts]);
+  useEffect(() => () => useGLTF.clear(urlsRef.current), []);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -282,7 +411,7 @@ export default function ShowroomScene({
   // Horizontal drag and ←/→ keys rotate the turntable.
   useEffect(() => {
     const el = inputTarget;
-    if (!el) return;
+    if (!el || !turntable) return;
     let dragging = false;
     let lastX = 0;
     const down = (e: PointerEvent) => {
@@ -321,13 +450,16 @@ export default function ShowroomScene({
       el.removeEventListener("pointercancel", up);
       el.removeEventListener("keydown", key);
     };
-  }, [inputTarget, spin]);
+  }, [inputTarget, turntable, spin]);
+
+  const animate = active && !still && !reduced;
 
   return (
     <Canvas
       frameloop="never"
       shadows="soft"
       dpr={[1, budget.maxDpr]}
+      onClick={turntable ? undefined : () => setStoppedFor(vehicleId)}
       onCreated={({ get }) => {
         // RenderGate swaps `invalidate`, so always call the current one.
         invalidateRef.current = () => get().invalidate();
@@ -336,25 +468,49 @@ export default function ShowroomScene({
         antialias: true,
         alpha: true,
         toneMapping: THREE.ACESFilmicToneMapping,
-        toneMappingExposure: SCENE_THEMES[theme].exposure,
+        toneMappingExposure: turntable ? SCENE_THEMES[theme].exposure : 1,
       }}
-      camera={{ position: [10, 5, 5], fov: 30 }}
+      camera={{ position: ORBIT_CAMERA, fov: 30 }}
       style={{ position: "absolute", inset: 0 }}
     >
       <AdaptiveDpr />
       <PerformanceMonitor />
       <ContactShadows frames={1} />
-      <CameraRig mobile={mobile} />
       <RenderGate fps={budget.fps} active={active} />
-      <FrameCap
-        enabled={active && !still && !reduced}
-        fps={AUTO_ROTATE_FPS}
-      />
-      <Lights theme={theme} />
+      {statsEnabled() && <RenderStats />}
+      <Lights theme={lightsTheme} />
       <Turntable theme={theme} />
+      {turntable ? (
+        <>
+          <CameraRig mobile={mobile} />
+          <FrameCap enabled={animate} fps={AUTO_ROTATE_FPS} />
+        </>
+      ) : (
+        <>
+          <FitToViewport />
+          <FrameRateIndependentDamping />
+          <AutoRotate enabled={animate && stoppedFor !== vehicleId} />
+          <OrbitControls
+            makeDefault
+            enableDamping
+            enableZoom
+            minZoom={1}
+            maxZoom={1}
+            enablePan={false}
+            minPolarAngle={Math.PI / 4}
+            maxPolarAngle={Math.PI / 2.5}
+          />
+        </>
+      )}
       <Suspense fallback={null}>
-        <Truck urls={urls} theme={theme} spin={spin} still={still} />
-        <FirstFrame onReady={onReady} />
+        {!turntable && <StudioEnvironment />}
+        <Truck
+          parts={parts}
+          theme={theme}
+          spin={turntable ? spin : undefined}
+          still={still}
+        />
+        <ReadySignal onReady={onReady} />
       </Suspense>
     </Canvas>
   );
