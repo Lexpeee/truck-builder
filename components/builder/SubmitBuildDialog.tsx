@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { Build } from "@/lib/builder";
+import { useBuilderStore } from "@/lib/builder-store";
 import { getCategory, getUpfit, getVehicle } from "@/lib/catalog";
 import { submitBuild, type CustomerDetails } from "@/lib/submit-build";
 import { useState, type FormEvent } from "react";
@@ -122,13 +123,8 @@ function BuildSummary({ build }: { build: Build }) {
 }
 
 /** Mounted only while the dialog is open, so it starts fresh every time. */
-function SubmitBuildForm({
-  build,
-  onClose,
-}: {
-  build: Build;
-  onClose: () => void;
-}) {
+function SubmitBuildForm({ onClose }: { onClose: () => void }) {
+  const build = useBuilderStore((s) => s.build);
   const [status, setStatus] = useState<"idle" | "submitting" | "done">("idle");
   const [error, setError] = useState(false);
 
@@ -226,11 +222,9 @@ function SubmitBuildForm({
 }
 
 export default function SubmitBuildDialog({
-  build,
   open,
   onOpenChange,
 }: {
-  build: Build;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -241,7 +235,7 @@ export default function SubmitBuildDialog({
         <DialogDescription>
           Review your build and tell us how to reach you.
         </DialogDescription>
-        <SubmitBuildForm build={build} onClose={() => onOpenChange(false)} />
+        <SubmitBuildForm onClose={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

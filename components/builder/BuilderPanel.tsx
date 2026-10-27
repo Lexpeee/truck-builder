@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { previewToggle, type Build } from "@/lib/builder";
+import { useBuilderStore } from "@/lib/builder-store";
 import {
   CATEGORIES,
   VEHICLES,
@@ -87,19 +88,12 @@ function Field({
 
 const itemClassName = "rounded-lg py-2";
 
-export default function BuilderPanel({
-  build,
-  notices,
-  onChangeVehicle,
-  onToggleUpfit,
-  onDismissNotices,
-}: {
-  build: Build;
-  notices: string[];
-  onChangeVehicle: (id: string) => void;
-  onToggleUpfit: (id: string) => void;
-  onDismissNotices: () => void;
-}) {
+export default function BuilderPanel() {
+  const build = useBuilderStore((s) => s.build);
+  const notices = useBuilderStore((s) => s.notices);
+  const onChangeVehicle = useBuilderStore((s) => s.changeVehicle);
+  const onToggleUpfit = useBuilderStore((s) => s.toggleUpfit);
+  const onDismissNotices = useBuilderStore((s) => s.dismissNotices);
   const available = upfitsForVehicle(build.vehicleId);
   const installed = new Set(build.upfitIds);
 
@@ -230,11 +224,7 @@ export default function BuilderPanel({
           </div>
           <Button onClick={() => setSubmitOpen(true)}>Submit New Build</Button>
         </div>
-        <SubmitBuildDialog
-          build={build}
-          open={submitOpen}
-          onOpenChange={setSubmitOpen}
-        />
+        <SubmitBuildDialog open={submitOpen} onOpenChange={setSubmitOpen} />
       </section>
     </div>
   );

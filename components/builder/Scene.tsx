@@ -1,4 +1,5 @@
 "use client";
+import { useBuilderStore } from "@/lib/builder-store";
 import { getUpfit, getVehicle, type Upfit, type Vehicle } from "@/lib/catalog";
 import {
   AdaptiveDpr,
@@ -112,13 +113,9 @@ const LoadingOverlay = () => {
   );
 };
 
-export default function Scene({
-  vehicleId,
-  upfitIds,
-}: {
-  vehicleId: string;
-  upfitIds: string[];
-}) {
+export default function Scene() {
+  const vehicleId = useBuilderStore((s) => s.build.vehicleId);
+  const upfitIds = useBuilderStore((s) => s.build.upfitIds);
   const vehicle = getVehicle(vehicleId);
   const [ready, setReady] = useState(false);
   const [budget] = useState(getRenderBudget);
