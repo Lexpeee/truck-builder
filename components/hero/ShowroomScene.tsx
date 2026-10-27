@@ -16,12 +16,13 @@ import {
   useState,
 } from "react";
 import * as THREE from "three";
+import { getRenderBudget } from "@/lib/render-budget";
+import { FrameCap, RenderGate } from "../three/render-loop";
 import {
   CAMERA,
   DISC,
   AUTO_ROTATE_FPS,
   FILL_POSITION,
-  MAX_DPR,
   HERO_BUILD,
   KEY_POSITION,
   MOTION,
@@ -74,33 +75,6 @@ class Spin {
     if (!this.reduced && idle)
       this.angle += MOTION.autoRotate * Math.min(delta, 0.1);
   }
-}
-
-/**
- * Canvases render on demand. While `enabled`, this requests frames at
- * AUTO_ROTATE_FPS and reports the elapsed seconds, so auto-rotate never takes
- * more GPU than a video call can spare.
- */
-export function FrameCap({
-  enabled,
-  onTick,
-}: {
-  enabled: boolean;
-  onTick?: (dt: number) => void;
-}) {
-  const invalidate = useThree((s) => s.invalidate);
-  useEffect(() => {
-    if (!enabled) return;
-    let last = performance.now();
-    const id = setInterval(() => {
-      const now = performance.now();
-      onTick?.((now - last) / 1000);
-      last = now;
-      invalidate();
-    }, 1000 / AUTO_ROTATE_FPS);
-    return () => clearInterval(id);
-  }, [enabled, onTick, invalidate]);
-  return null;
 }
 
 function CameraRig({ mobile }: { mobile: boolean }) {
@@ -291,6 +265,7 @@ export default function ShowroomScene({
   const urls = useMemo(() => (model ? [model] : defaultUrls()), [model]);
   const [spin] = useState(() => new Spin());
   const [reduced, setReduced] = useState(false);
+  const [budget] = useState(getRenderBudget);
   const invalidateRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -350,11 +325,12 @@ export default function ShowroomScene({
 
   return (
     <Canvas
-      frameloop="demand"
+      frameloop="never"
       shadows="soft"
-      dpr={[1, MAX_DPR]}
-      onCreated={({ invalidate }) => {
-        invalidateRef.current = invalidate;
+      dpr={[1, budget.maxDpr]}
+      onCreated={({ get }) => {
+        // RenderGate swaps `invalidate`, so always call the current one.
+        invalidateRef.current = () => get().invalidate();
       }}
       gl={{
         antialias: true,
@@ -369,7 +345,11 @@ export default function ShowroomScene({
       <PerformanceMonitor />
       <ContactShadows frames={1} />
       <CameraRig mobile={mobile} />
-      <FrameCap enabled={active && !still && !reduced} />
+      <RenderGate fps={budget.fps} active={active} />
+      <FrameCap
+        enabled={active && !still && !reduced}
+        fps={AUTO_ROTATE_FPS}
+      />
       <Lights theme={theme} />
       <Turntable theme={theme} />
       <Suspense fallback={null}>

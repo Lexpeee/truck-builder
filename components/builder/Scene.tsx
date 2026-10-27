@@ -22,8 +22,15 @@ import {
   useState,
 } from "react";
 import { Helmet } from "react-helmet-async";
-import { MAX_DPR } from "../hero/scene-config";
-import { FrameCap, Lights, Ticks, Turntable } from "../hero/ShowroomScene";
+import RenderStats, { statsEnabled } from "../three/RenderStats";
+import { getRenderBudget } from "@/lib/render-budget";
+import { AUTO_ROTATE_FPS } from "../hero/scene-config";
+import { Lights, Ticks, Turntable } from "../hero/ShowroomScene";
+import {
+  FrameCap,
+  FrameRateIndependentDamping,
+  RenderGate,
+} from "../three/render-loop";
 
 const Model = ({ item }: { item: Vehicle | Upfit }) => {
   const { scene } = useGLTF(`/models/${item.fileName}`);
@@ -56,7 +63,7 @@ const ORBIT_RATE = (2 * Math.PI) / 60;
 
 /**
  * OrbitControls' own autoRotate re-invalidates every frame, which would run
- * at the display rate. Drive the orbit from the 30 fps FrameCap instead.
+ * at the display rate. Drive the orbit from the auto-rotate FrameCap instead.
  */
 const AutoRotate = ({ enabled }: { enabled: boolean }) => {
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
@@ -65,7 +72,11 @@ const AutoRotate = ({ enabled }: { enabled: boolean }) => {
       controls?.setAzimuthalAngle(controls.getAzimuthalAngle() - ORBIT_RATE * dt),
     [controls],
   );
-  return <FrameCap enabled={enabled && !!controls} onTick={onTick} />;
+  return <FrameCap
+      enabled={enabled && !!controls}
+      fps={AUTO_ROTATE_FPS}
+      onTick={onTick}
+    />;
 };
 
 /**
@@ -110,6 +121,7 @@ export default function Scene({
 }) {
   const vehicle = getVehicle(vehicleId);
   const [ready, setReady] = useState(false);
+  const [budget] = useState(getRenderBudget);
 
   const [isClicked, setIsClicked] = useState(false);
 
@@ -123,12 +135,15 @@ export default function Scene({
         <title>{vehicle?.name || "Showroom"} | NWT Truck Builder</title>
       </Helmet>
       <Canvas
-        frameloop="demand"
-        dpr={[1, MAX_DPR]}
+        frameloop="never"
+        dpr={[1, budget.maxDpr]}
         camera={{ position: CAMERA_POSITION, fov: 30 }}
         shadows
         onClick={(e) => setIsClicked(true)}
       >
+        <RenderGate fps={budget.fps} />
+        {statsEnabled() && <RenderStats />}
+        <FrameRateIndependentDamping />
         <AdaptiveDpr />
         <PerformanceMonitor />
         <ContactShadows frames={1} />

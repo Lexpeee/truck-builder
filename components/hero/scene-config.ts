@@ -46,10 +46,9 @@ export const MOTION = {
   keyStep: 0.15, // rad per press
 };
 
-/** Shadow map and pixel ratio are capped to leave GPU headroom for video calls (DESIGN.md §6, 4a). */
+/** Shadow map is capped to leave GPU headroom for video calls (DESIGN.md §6, 4a). Frame rate and pixel ratio: lib/render-budget.ts. */
 export const SHADOW = { map: 1024, extent: 7, bias: -0.0005 };
-export const MAX_DPR = 1.5;
-/** Frame rate while auto-rotating; otherwise the scene renders on demand. */
+/** Frame rate while auto-rotating; otherwise the scene renders on demand (DESIGN.md §6, 4a). */
 export const AUTO_ROTATE_FPS = 30;
 
 /** The configuration shown in the hero. Chips in ShowroomHero describe this. */
