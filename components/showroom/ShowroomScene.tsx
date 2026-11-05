@@ -298,6 +298,73 @@ const Model = ({ url, position, colors }: Part & { colors?: MaterialColors }) =>
   return <primitive object={object} position={position} />;
 };
 
+const ROOM_URL = "/models/nwt_workshop_room.glb";
+
+/** Linear multiplier on the room's vertex colours. */
+const ROOM_BRIGHTNESS = 0.42;
+
+/** Behind this colour the open front of the room shows; close to the room's wall tone. */
+const ROOM_BACKDROP = "#2a3038";
+
+/**
+ * Room nodes that stand in the camera's way when it orbits outside the room
+ * (phones and the exploded view pull back past the walls): each is hidden
+ * while the camera is beyond its side. Coordinates are the room's, in metres.
+ */
+const ROOM_WALLS: { nodes: RegExp; hiddenWhen: (c: THREE.Vector3) => boolean }[] = [
+  // three.js turns the spaces in node names into underscores, hence [ _].
+  { nodes: /^Left[ _]wall$/, hiddenWhen: (c) => c.x < -11.7 },
+  { nodes: /^(Right[ _]wall|Garage[ _]door)/, hiddenWhen: (c) => c.x > 11.5 },
+  { nodes: /^(Rear[ _]wall|NWT[ _])|^Website[ _]sign/, hiddenWhen: (c) => c.z < -8.5 },
+];
+
+const setVisible = (objects: THREE.Object3D[], visible: boolean) => {
+  for (const o of objects) o.visible = visible;
+};
+
+/**
+ * The workshop room around the truck. Its GLB has no materials (the loader's
+ * default would be fully metallic), only vertex colours, so it gets one matte
+ * material. Its display platform is skipped: the builder's own turntable is
+ * used instead.
+ */
+function Room() {
+  const { scene } = useGLTF(ROOM_URL);
+  const walls = useRef<{ objects: THREE.Object3D[]; hiddenWhen: (c: THREE.Vector3) => boolean }[]>([]);
+
+  useLayoutEffect(() => {
+    const material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      // The truck's lights are set for a white vehicle; scale the room down so
+      // the floor reads as concrete rather than as bright as the paint.
+      color: new THREE.Color().setScalar(ROOM_BRIGHTNESS),
+      roughness: 0.9,
+      metalness: 0,
+      flatShading: true, // the GLB carries no normals
+    });
+    const found = ROOM_WALLS.map((w) => ({ objects: [] as THREE.Object3D[], hiddenWhen: w.hiddenWhen }));
+    scene.traverse((o) => {
+      if (/platform/i.test(o.name)) o.visible = false;
+      ROOM_WALLS.forEach((w, i) => w.nodes.test(o.name) && found[i].objects.push(o));
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = material;
+      // Only the floor takes the truck's shadow.
+      mesh.receiveShadow = /floor/i.test(o.name);
+    });
+    walls.current = found;
+    return () => material.dispose();
+  }, [scene]);
+
+  useFrame(({ camera }) => {
+    for (const w of walls.current) {
+      const hidden = w.hiddenWhen(camera.position);
+      setVisible(w.objects, !hidden);
+    }
+  });
+  return <primitive object={scene} />;
+}
+
 /** Sits the parts on the disc with the ticks; the turntable also spins them. */
 function Truck({
   parts,
@@ -808,6 +875,7 @@ export default function ShowroomScene({
       camera={{ position: ORBIT_CAMERA, fov: 30 }}
       style={{ position: "absolute", inset: 0 }}
     >
+      {!turntable && <color attach="background" args={[ROOM_BACKDROP]} />}
       <AdaptiveDpr />
       <PerformanceMonitor />
       <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}:${settleCount}`} />
@@ -859,6 +927,7 @@ export default function ShowroomScene({
       <Suspense fallback={null}>
         <StudioEnvironment />
         {!turntable && <OrbitFill />}
+        {!turntable && <Room />}
         <Truck
           parts={parts}
           partColors={partColors}

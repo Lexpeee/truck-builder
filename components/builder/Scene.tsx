@@ -52,9 +52,7 @@ export default function Scene() {
       <Helmet>
         <title>{getVehicle(vehicleId)?.name || "Showroom"} | NWT Truck Builder</title>
       </Helmet>
-      <div 
-        className="absolute inset-0 z-0"
-      >
+      <div className="absolute inset-0 z-0">
         <ShowroomScene
           vehicleId={vehicleId}
           upfitIds={upfitIds}
