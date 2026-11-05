@@ -33,6 +33,7 @@ import {
 } from "../three/render-loop";
 import {
   CenterLines,
+  ExplodeCamera,
   ExplodeDriver,
   ExplodeLabels,
   LabelOverlay,
@@ -390,7 +391,7 @@ const fitDistance = (aspect: number) =>
   Math.hypot(...ORBIT_CAMERA) * Math.max(1, FIT_ASPECT / aspect);
 
 /** OrbitControls fitted to the viewport, with zoom limited around that distance. */
-function OrbitRig() {
+function OrbitRig({ explodeFit }: { explodeFit: number | null }) {
   const camera = useThree((s) => s.camera);
   const aspect = useThree((s) => s.size.width / s.size.height);
   const fit = fitDistance(aspect);
@@ -403,7 +404,7 @@ function OrbitRig() {
       enableDamping
       enableZoom
       minDistance={fit * ZOOM.in}
-      maxDistance={fit * ZOOM.out}
+      maxDistance={Math.max(fit, explodeFit ?? 0) * ZOOM.out}
       enablePan={false}
       minPolarAngle={POLAR.min}
       maxPolarAngle={POLAR.max}
@@ -451,10 +452,13 @@ function ViewTransition({
   request,
   front,
   reduced,
+  explodeFit,
 }: {
   request: { view: View; n: number } | null;
   front: [number, number];
   reduced: boolean;
+  /** While exploded, presets keep every part in view. */
+  explodeFit: number | null;
 }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
@@ -471,11 +475,13 @@ function ViewTransition({
     const from = new THREE.Spherical().setFromVector3(
       camera.position.clone().sub(controls.target),
     );
-    const to = viewSpherical(request.view, front, fitDistance(aspect));
+    const to = viewSpherical(request.view, front, Math.max(fitDistance(aspect), explodeFit ?? 0));
     // Go the short way round.
     to.theta = from.theta + Math.atan2(Math.sin(to.theta - from.theta), Math.cos(to.theta - from.theta));
     tween.current = { from, to, t0: performance.now() };
     invalidate();
+    // explodeFit is read when a preset is chosen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request, controls, camera, front, aspect, invalidate]);
 
   useFrame(() => {
@@ -624,6 +630,7 @@ export default function ShowroomScene({
   const [settleCount, setSettleCount] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
+  const [explodeFit, setExplodeFit] = useState<number | null>(null);
   const firstToggle = useRef(true);
   const [reduced, setReduced] = useState(false);
   // Orbit auto-rotate stops on click and resumes for the next vehicle.
@@ -779,13 +786,24 @@ export default function ShowroomScene({
         </>
       ) : (
         <>
-          <OrbitRig />
+          <OrbitRig explodeFit={explodeFit} />
           <FrameRateIndependentDamping />
           <AutoRotate enabled={animate && stoppedFor !== vehicleId} />
-          <ViewTransition request={viewRequest} front={front} reduced={reduced} />
+          <ViewTransition
+            request={viewRequest}
+            front={front}
+            reduced={reduced}
+            explodeFit={explodeFit}
+          />
           {explodable && (
             <>
               <ExplodeDriver explosion={explosion} onSettled={handleSettled} />
+              <ExplodeCamera
+                explosion={explosion}
+                exploded={exploded}
+                reduced={reduced}
+                onFit={setExplodeFit}
+              />
               <ExplodeLabels explosion={explosion} plan={plan} front={front} overlayRef={labelsRef} />
             </>
           )}

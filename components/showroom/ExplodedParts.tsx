@@ -2,9 +2,9 @@
 import { EXPLODE_TIMING, type ExplodePart } from "@/lib/explode";
 import { Line } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import * as THREE from "three";
-import type { Line2, LineMaterial } from "three-stdlib";
+import type { Line2, LineMaterial, OrbitControls } from "three-stdlib";
 
 export const easeInOut = (k: number) =>
   k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
@@ -330,5 +330,129 @@ export function ExplodeLabels({
       placed.push(r);
     }
   });
+  return null;
+}
+
+const FIT_MARGIN = 1.1;
+const _rel = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _upv = new THREE.Vector3();
+const _back = new THREE.Vector3();
+const _corner = new THREE.Vector3();
+
+/**
+ * Smallest camera distance from `target`, along the current view direction,
+ * at which every exploded part fits the view with a 10% margin.
+ */
+function fitExplodedRadius(
+  explosion: Explosion,
+  camera: THREE.PerspectiveCamera,
+  target: THREE.Vector3,
+) {
+  _back.subVectors(camera.position, target).normalize();
+  _right.crossVectors(camera.up, _back).normalize();
+  _upv.crossVectors(_back, _right);
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const tanH = tanV * camera.aspect;
+  let need = 0;
+  for (const p of explosion.parts) {
+    const box = explosion.boxes.get(p.id);
+    if (!box) continue;
+    for (let i = 0; i < 8; i++) {
+      _corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      _corner.x += p.offset[0];
+      _corner.y += p.offset[1];
+      _corner.z += p.offset[2];
+      _rel.subVectors(_corner, target);
+      const along = _rel.dot(_back);
+      need = Math.max(
+        need,
+        along + (FIT_MARGIN * Math.abs(_rel.dot(_right))) / tanH,
+        along + (FIT_MARGIN * Math.abs(_rel.dot(_upv))) / tanV,
+      );
+    }
+  }
+  return need;
+}
+
+/**
+ * Reframes the orbit camera with the explosion: pulls back (never in) to fit
+ * the exploded parts, over the animation's length, and returns to the saved
+ * distance on reassembly. Keeps the user's angle; never fights a drag.
+ * `onFit` reports the distance zoom limits and view presets must allow.
+ */
+export function ExplodeCamera({
+  explosion,
+  exploded,
+  reduced,
+  onFit,
+}: {
+  explosion: Explosion;
+  exploded: boolean;
+  reduced: boolean;
+  onFit: (radius: number | null) => void;
+}) {
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const controls = useThree((s) => s.controls) as OrbitControls | null;
+  const invalidate = useThree((s) => s.invalidate);
+  const dragging = useRef(false);
+  const saved = useRef<number | null>(null);
+  const tween = useRef<{ from: number; to: number; t0: number; ms: number; done?: () => void } | null>(null);
+  const first = useRef(true);
+
+  useEffect(() => {
+    if (!controls) return;
+    const start = () => {
+      dragging.current = true;
+      tween.current = null; // the user takes over
+    };
+    const end = () => (dragging.current = false);
+    controls.addEventListener("start", start);
+    controls.addEventListener("end", end);
+    return () => {
+      controls.removeEventListener("start", start);
+      controls.removeEventListener("end", end);
+    };
+  }, [controls]);
+
+  useEffect(() => {
+    if (!controls) return;
+    if (first.current) {
+      first.current = false;
+      if (!exploded) return; // mounted assembled: nothing to frame
+    }
+    const current = camera.position.distanceTo(controls.target);
+    const ms = reduced ? 0 : explosion.durationMs;
+    if (exploded) {
+      saved.current ??= current;
+      const to = Math.max(current, fitExplodedRadius(explosion, camera, controls.target));
+      onFit(to);
+      if (!dragging.current) tween.current = { from: current, to, t0: performance.now(), ms };
+    } else {
+      const to = saved.current ?? current;
+      saved.current = null;
+      // Lower the zoom limit only once the camera is back, so it never clamps mid-way.
+      const done = () => onFit(null);
+      if (dragging.current) done();
+      else tween.current = { from: current, to, t0: performance.now(), ms, done };
+    }
+    invalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exploded, controls]);
+
+  useFrame(() => {
+    const tw = tween.current;
+    if (!tw || !controls) return;
+    const k = tw.ms ? Math.min(1, (performance.now() - tw.t0) / tw.ms) : 1;
+    const r = tw.from + (tw.to - tw.from) * easeInOut(k);
+    _rel.subVectors(camera.position, controls.target).setLength(r);
+    camera.position.copy(controls.target).add(_rel);
+    controls.update();
+    if (k < 1) invalidate();
+    else {
+      tween.current = null;
+      tw.done?.();
+    }
+  }, -1);
   return null;
 }
