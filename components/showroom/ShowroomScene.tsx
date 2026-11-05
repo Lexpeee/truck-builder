@@ -1,5 +1,5 @@
 "use client";
-import { getUpfit, getVehicle } from "@/lib/catalog";
+import { getUpfit, getVehicle, upfitsForVehicle } from "@/lib/catalog";
 import {
   AdaptiveDpr,
   ContactShadows,
@@ -32,6 +32,7 @@ import {
   RenderGate,
 } from "../three/render-loop";
 import {
+  rememberFadeBase,
   CenterLines,
   ExplodeCamera,
   ExplodeDriver,
@@ -41,7 +42,12 @@ import {
   toolbarInset,
   ExplodeGroup,
   Explosion,
+  NO_SLIDE,
+  Presence,
+  PresenceDriver,
   easeInOut,
+  nextSlide,
+  type Slide,
 } from "./ExplodedParts";
 import {
   CAMERA,
@@ -259,21 +265,27 @@ const Model = ({ url, position, colors }: Part & { colors?: MaterialColors }) =>
   const { scene } = useGLTF(url);
   const invalidate = useThree((s) => s.invalidate);
   // Clone so the same GLB can be re-mounted without stealing the cached scene.
-  // scene.clone shares materials with the cache, so paint materials get their
-  // own copy: repainting this truck never repaints another (hero vs builder).
+  // scene.clone shares materials with the cache, so every material gets its own
+  // copy: repainting or fading this truck's part never touches another truck's
+  // (hero vs builder). Paint materials are tracked for recolouring.
   const { object, paint } = useMemo(() => {
     const o = scene.clone(true);
     const own = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+    const paint: THREE.MeshStandardMaterial[] = [];
     o.traverse((c) => {
       const m = c as THREE.Mesh;
       if (!m.isMesh) return;
       m.castShadow = m.receiveShadow = true;
       const mat = m.material as THREE.MeshStandardMaterial;
-      if (!PAINT_MATERIALS.has(mat.name)) return;
-      if (!own.has(mat)) own.set(mat, mat.clone());
+      if (!own.has(mat)) {
+        const copy = mat.clone();
+        copy.userData.fadeBase = rememberFadeBase(copy);
+        own.set(mat, copy);
+        if (PAINT_MATERIALS.has(mat.name)) paint.push(copy);
+      }
       m.material = own.get(mat)!;
     });
-    return { object: o, paint: [...own.values()] };
+    return { object: o, paint };
   }, [scene]);
   useEffect(() => () => disposeObject(object), [object]);
 
@@ -367,19 +379,26 @@ function Room() {
 
 /** Sits the parts on the disc with the ticks; the turntable also spins them. */
 function Truck({
+  vehicleId,
   parts,
   partColors,
   explosion,
+  presence,
   plan,
+  onSlideSettled,
   theme,
   spin,
   still,
 }: {
+  vehicleId: string;
   parts: Part[];
   partColors?: Record<string, MaterialColors>;
   /** Present when parts can be separated; `plan` gives each part's offset. */
   explosion?: Explosion;
+  /** Present with `explosion`: upfits slide in and out as the build changes. */
+  presence?: Presence;
   plan?: ExplodePart[];
+  onSlideSettled?: () => void;
   theme: HeroTheme;
   /** Present for the turntable: centers the parts and rotates the group. */
   spin?: Spin;
@@ -389,6 +408,28 @@ function Truck({
   const truck = useRef<THREE.Group>(null);
   const key = parts.map((p) => p.url).join("|");
 
+  // Upfits that just left the build stay mounted until they have slid out.
+  // Derived while rendering (React's way to adjust state when a prop changes).
+  const [slide, setSlide] = useState<Slide<Part>>(NO_SLIDE);
+  const [seen, setSeen] = useState({ vehicleId, parts, plan: plan ?? [] });
+  if (plan && seen.plan !== plan) {
+    setSeen({ vehicleId, parts, plan });
+    setSlide(nextSlide(seen, { vehicleId, parts, plan }, slide));
+  }
+  const onGone = useCallback(
+    (ids: string[]) =>
+      setSlide((s) => ({ ...s, leaving: s.leaving.filter((l) => !ids.includes(l.part.id!)) })),
+    [],
+  );
+  // A different vehicle appears whole.
+  useLayoutEffect(() => presence?.reset(), [presence, vehicleId]);
+  const leavingIds = new Set(slide.leaving.map((l) => l.part.id));
+  const shown = [
+    ...parts.map((p) => ({ p, ex: plan?.find((x) => x.id === p.id), leaving: false })),
+    ...slide.leaving
+      .filter((l) => !parts.some((q) => q.id === l.part.id))
+      .map((l) => ({ p: l.part, ex: l.plan, leaving: true })),
+  ];
   // Center on the disc and rest the lowest point on its top face. Re-runs when
   // the parts change or the Suspense boundary reveals them again.
   useLayoutEffect(() => {
@@ -411,11 +452,17 @@ function Truck({
   return (
     <group ref={spinner}>
       <group ref={truck}>
-        {parts.map((p) => {
+        {shown.map(({ p, ex, leaving }) => {
           const model = <Model {...p} colors={p.id ? partColors?.[p.id] : undefined} />;
-          const part = explosion && plan?.find((x) => x.id === p.id);
-          return part ? (
-            <ExplodeGroup key={p.url} explosion={explosion} part={part}>
+          return explosion && presence && ex ? (
+            <ExplodeGroup
+              key={p.url}
+              explosion={explosion}
+              presence={presence}
+              part={ex}
+              enterDelay={slide.enter[ex.id]}
+              leaveDelay={leaving || leavingIds.has(ex.id) ? (slide.leave[ex.id] ?? 0) : undefined}
+            >
               {model}
             </ExplodeGroup>
           ) : (
@@ -423,6 +470,9 @@ function Truck({
           );
         })}
         {explosion && plan && <CenterLines explosion={explosion} plan={plan} />}
+        {presence && onSlideSettled && (
+          <PresenceDriver presence={presence} onGone={onGone} onSettled={onSlideSettled} />
+        )}
       </group>
       <Ticks theme={theme} />
     </group>
@@ -721,6 +771,7 @@ export default function ShowroomScene({
   const explodable = !turntable && !model;
   const plan = useMemo(() => explodePlan(vehicleId, upfitIds), [vehicleId, upfitIds]);
   const [explosion] = useState(() => new Explosion());
+  const [presence] = useState(() => new Presence());
   /** Bumped when parts arrive, so baked shadows re-render once per animation. */
   const [settleCount, setSettleCount] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -769,16 +820,28 @@ export default function ShowroomScene({
   }, [parts]);
   useEffect(() => () => useGLTF.clear(urlsRef.current), []);
 
+  // Once the truck is up, fetch the vehicle's other upfits in the background so
+  // picking one is instant: a part that isn't cached suspends the whole scene.
+  const preloadedRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (!loaded || !explodable) return;
+    const urls = upfitsForVehicle(vehicleId).map((u) => partFor(u).url);
+    urls.forEach((url) => useGLTF.preload(url));
+    preloadedRef.current = urls;
+  }, [loaded, explodable, vehicleId]);
+  useEffect(() => () => useGLTF.clear(preloadedRef.current), []);
+
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const sync = () => {
       spin.setReducedMotion(mq.matches);
+      presence.setReduced(mq.matches);
       setReduced(mq.matches);
     };
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
-  }, [spin]);
+  }, [spin, presence]);
 
   // Horizontal drag and ←/→ keys rotate the turntable.
   useEffect(() => {
@@ -929,9 +992,12 @@ export default function ShowroomScene({
         {!turntable && <OrbitFill />}
         {!turntable && <Room />}
         <Truck
+          vehicleId={vehicleId}
           parts={parts}
           partColors={partColors}
           explosion={explodable ? explosion : undefined}
+          presence={explodable ? presence : undefined}
+          onSlideSettled={handleSettled}
           plan={plan}
           theme={theme}
           spin={turntable ? spin : undefined}

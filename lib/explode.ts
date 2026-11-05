@@ -32,6 +32,15 @@ export const EXPLODE_TIMING = {
   fadeMs: 200,
 };
 
+/**
+ * Adding or removing an upfit: it slides along its explode direction. Shorter
+ * than Show parts, since it happens on every pick.
+ */
+export const SLIDE_TIMING = {
+  durationMs: 450,
+  staggerMs: 120,
+};
+
 export type Vec3 = [number, number, number];
 
 /**
@@ -73,4 +82,22 @@ export function explodePlan(vehicleId: string, upfitIds: string[]): ExplodePart[
     .filter((p) => p.offset.some((v) => v !== 0))
     .sort((a, b) => EXPLODE[a.role].order - EXPLODE[b.role].order);
   return parts.map((p) => ({ ...p, rank: moving.indexOf(p) }));
+}
+
+/** A body goes first when arriving and last when leaving; racks and bumpers need it. */
+const slideDepth = (id: string) => (getUpfit(id)?.requires?.length ? 1 : 0);
+
+/**
+ * Milliseconds after a build change at which each added upfit starts sliding
+ * in and each removed one starts sliding out. Dependents arrive after the body
+ * and leave before it; arrivals wait for departures, so a swapped bumper never
+ * passes through the one it replaces.
+ */
+export function slideDelays(added: string[], removed: string[]) {
+  const { durationMs, staggerMs } = SLIDE_TIMING;
+  const leaveMs = removed.length ? durationMs + staggerMs : 0;
+  return {
+    enter: Object.fromEntries(added.map((id) => [id, leaveMs + slideDepth(id) * staggerMs])),
+    leave: Object.fromEntries(removed.map((id) => [id, (1 - slideDepth(id)) * staggerMs])),
+  };
 }

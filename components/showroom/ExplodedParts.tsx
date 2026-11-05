@@ -1,5 +1,5 @@
 "use client";
-import { EXPLODE_TIMING, type ExplodePart } from "@/lib/explode";
+import { EXPLODE_TIMING, SLIDE_TIMING, slideDelays, type ExplodePart } from "@/lib/explode";
 import { Line } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
@@ -38,6 +38,8 @@ export class Explosion {
       // Separate in order; put back in reverse.
       const slot = exploded ? p.rank : moving.length - 1 - p.rank;
       this.startAt.set(p.id, now + slot * EXPLODE_TIMING.staggerMs);
+      // A part that has never moved is at the opposite end from where it is going.
+      if (!this.progress.has(p.id)) this.progress.set(p.id, exploded ? 0 : 1);
       if (reduced) this.progress.set(p.id, this.target);
     }
   }
@@ -96,6 +98,172 @@ export class Explosion {
 }
 
 /**
+ * Slide progress per upfit (0 away, 1 mounted) while one is added or removed,
+ * stepped by wall-clock time like Explosion. A part with no entry is simply
+ * mounted. Entries are dropped when a removed part has finished leaving.
+ */
+export class Presence {
+  private progress = new Map<string, number>();
+  private target = new Map<string, 0 | 1>();
+  private startAt = new Map<string, number>();
+  private last = 0;
+  private reduced = false;
+  private changed = false;
+
+  setReduced(reduced: boolean) {
+    this.reduced = reduced;
+  }
+
+  /** Forget everything: a different vehicle appears whole, nothing slides. */
+  reset() {
+    this.progress.clear();
+    this.target.clear();
+    this.startAt.clear();
+  }
+
+  /** A part has mounted. With `enterDelay` it slides in after that many ms, from the start of its slide. */
+  mount(id: string, now: number, enterDelay?: number) {
+    if (this.progress.has(id)) return; // e.g. remounted by Suspense mid-slide
+    this.target.set(id, 1);
+    if (enterDelay === undefined || this.reduced) {
+      this.progress.set(id, 1);
+      return;
+    }
+    this.changed = true;
+    this.last = now;
+    this.progress.set(id, 0);
+    this.startAt.set(id, now + enterDelay);
+  }
+
+  /** Slide out after `delay` ms (the part is no longer in the build). */
+  hide(id: string, now: number, delay: number) {
+    this.changed = true;
+    this.last = now;
+    if (!this.progress.has(id)) this.progress.set(id, 1);
+    this.target.set(id, 0);
+    this.startAt.set(id, now + delay);
+    if (this.reduced) this.progress.set(id, 0);
+  }
+
+  /** Put back in the build while still sliding out: slide back in from where it is. */
+  show(id: string, now: number) {
+    if (this.target.get(id) !== 0) return;
+    this.changed = true;
+    this.last = now;
+    this.target.set(id, 1);
+    this.startAt.set(id, now);
+    if (this.reduced) this.progress.set(id, 1);
+  }
+
+  /** 1 mounted, 0 slid fully away. */
+  eased(id: string) {
+    return easeInOut(this.progress.get(id) ?? 1);
+  }
+
+  /** Advance to `now`: whether any part is still moving, and the ids that finished sliding out. */
+  step(now: number) {
+    const dt = now - this.last;
+    this.last = now;
+    let moving = false;
+    const gone: string[] = [];
+    for (const [id, cur] of this.progress) {
+      const target = this.target.get(id) ?? 1;
+      let next = cur;
+      if (cur !== target) {
+        moving = true;
+        const active = Math.min(dt, now - (this.startAt.get(id) ?? 0));
+        if (active > 0) {
+          const delta = active / SLIDE_TIMING.durationMs;
+          next = target === 1 ? Math.min(1, cur + delta) : Math.max(0, cur - delta);
+          this.progress.set(id, next);
+        }
+      }
+      if (target === 0 && next === 0) gone.push(id);
+    }
+    for (const id of gone) {
+      this.progress.delete(id);
+      this.target.delete(id);
+      this.startAt.delete(id);
+    }
+    return { moving, gone };
+  }
+
+  /** True once after each build change, when everything has stopped. */
+  takeSettled(moving: boolean) {
+    if (moving || !this.changed) return false;
+    this.changed = false;
+    return true;
+  }
+}
+
+/** Upfits sliding out of the build; still drawn until they finish. */
+export type Slide<T> = {
+  /** Ms after the change at which each arriving upfit starts sliding in. */
+  enter: Record<string, number>;
+  /** Ms after the change at which each leaving upfit starts sliding out. */
+  leave: Record<string, number>;
+  leaving: { part: T; plan: ExplodePart }[];
+};
+
+export const NO_SLIDE: Slide<never> = { enter: {}, leave: {}, leaving: [] };
+
+type BuildView<T> = { vehicleId: string; parts: T[]; plan: ExplodePart[] };
+
+const upfitIds = (plan: ExplodePart[]) => plan.filter((p) => p.role !== "chassis").map((p) => p.id);
+
+/**
+ * What slides when the build goes from `prev` to `next`. A different vehicle
+ * replaces everything at once; the same vehicle slides only its changed upfits.
+ */
+export function nextSlide<T extends { id?: string }>(
+  prev: BuildView<T>,
+  next: BuildView<T>,
+  slide: Slide<T>,
+): Slide<T> {
+  if (prev.vehicleId !== next.vehicleId) return NO_SLIDE;
+  const before = upfitIds(prev.plan);
+  const after = upfitIds(next.plan);
+  const added = after.filter((id) => !before.includes(id));
+  const removed = before.filter((id) => !after.includes(id));
+  const delays = slideDelays(added, removed);
+  const stillLeaving = slide.leaving.filter((l) => !after.includes(l.part.id!));
+  return {
+    enter: delays.enter,
+    leave: {
+      ...Object.fromEntries(stillLeaving.map((l) => [l.part.id!, slide.leave[l.part.id!] ?? 0])),
+      ...delays.leave,
+    },
+    leaving: [
+      ...stillLeaving,
+      ...removed.map((id) => ({
+        part: prev.parts.find((p) => p.id === id)!,
+        plan: prev.plan.find((p) => p.id === id)!,
+      })),
+    ],
+  };
+}
+
+/** Steps the slides and asks for frames only while something moves. */
+export function PresenceDriver({
+  presence,
+  onGone,
+  onSettled,
+}: {
+  presence: Presence;
+  onGone: (ids: string[]) => void;
+  onSettled: () => void;
+}) {
+  const invalidate = useThree((s) => s.invalidate);
+  useFrame(() => {
+    const { moving, gone } = presence.step(performance.now());
+    if (moving) invalidate();
+    if (gone.length) onGone(gone);
+    if (presence.takeSettled(moving)) onSettled();
+  }, -3);
+  return null;
+}
+
+/**
  * Steps the explosion before anything else in the frame. Requests frames only
  * while parts move, so the canvas returns to on-demand rendering (0 idle frames).
  */
@@ -139,20 +307,77 @@ function partBounds(root: THREE.Object3D) {
   return box;
 }
 
-/** Moves one part along its offset as the explosion progresses. */
+/** A material's own opacity settings, restored exactly once a fade ends. */
+type FadeBase = { opacity: number; transparent: boolean; alphaTest: number };
+
+export const rememberFadeBase = (m: THREE.Material): FadeBase => ({
+  opacity: m.opacity,
+  transparent: m.transparent,
+  alphaTest: m.alphaTest,
+});
+
+/**
+ * Fades every material under `root` to `f` (0 gone, 1 as authored). While
+ * fading, materials blend (the models' alpha-test cutoff would otherwise drop
+ * everything below half opacity); at 1 they return to exactly as loaded. A
+ * mostly faded part stops casting its shadow.
+ */
+function applyFade(root: THREE.Object3D, f: number, wasOpaque: boolean) {
+  const opaque = f >= 1;
+  root.visible = f > 0.001;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mat = mesh.material as THREE.Material;
+    const base = mat.userData.fadeBase as FadeBase | undefined;
+    if (!base) return;
+    if (opaque) {
+      mat.opacity = base.opacity;
+      mat.transparent = base.transparent;
+      mat.alphaTest = base.alphaTest;
+    } else {
+      mat.opacity = base.opacity * f;
+      mat.transparent = true;
+      mat.alphaTest = 0;
+    }
+    // Blending and the alpha test change the shader; opacity alone is a uniform.
+    if (wasOpaque !== opaque) mat.needsUpdate = true;
+    mesh.castShadow = opaque || f > 0.5;
+  });
+}
+
+/**
+ * Moves one part along its offset as the explosion progresses, and while it
+ * slides in (`enterDelay`) or out (`leaveDelay`, set while it is leaving),
+ * fading with the slide.
+ */
 export function ExplodeGroup({
   explosion,
+  presence,
   part,
+  enterDelay,
+  leaveDelay,
   children,
 }: {
   explosion: Explosion;
+  presence: Presence;
   part: ExplodePart;
+  enterDelay?: number;
+  leaveDelay?: number;
   children: ReactNode;
 }) {
   const ref = useRef<THREE.Group>(null);
+  const invalidate = useThree((s) => s.invalidate);
+  const fade = useRef(1);
   const place = () => {
-    const e = explosion.eased(part.id);
-    ref.current!.position.set(part.offset[0] * e, part.offset[1] * e, part.offset[2] * e);
+    // Separated, plus however far it still has to slide in (or has slid out): same direction.
+    const present = presence.eased(part.id);
+    const k = explosion.eased(part.id) + (1 - present);
+    ref.current!.position.set(part.offset[0] * k, part.offset[1] * k, part.offset[2] * k);
+    if (present !== fade.current) {
+      applyFade(ref.current!, present, fade.current >= 1);
+      fade.current = present;
+    }
   };
 
   useLayoutEffect(() => {
@@ -160,12 +385,23 @@ export function ExplodeGroup({
     // Measure mounted, then place: a part added while exploded never shows mounted.
     g.position.set(0, 0, 0);
     explosion.boxes.set(part.id, partBounds(g));
+    presence.mount(part.id, performance.now(), enterDelay);
     place();
     return () => {
       explosion.boxes.delete(part.id);
     };
+    // enterDelay is read once, when the part mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [explosion, part]);
+  }, [explosion, presence, part]);
+
+  // Leaving (or coming back before it has gone).
+  useLayoutEffect(() => {
+    const now = performance.now();
+    if (leaveDelay === undefined) presence.show(part.id, now);
+    else presence.hide(part.id, now, leaveDelay);
+    invalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaveDelay === undefined]);
 
   useFrame(place, -2);
   return <group ref={ref}>{children}</group>;
@@ -250,13 +486,15 @@ export function LabelOverlay({
   return (
     <div ref={overlayRef} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
       {plan.map((p) => (
-        <div
-          key={p.id}
-          data-part={p.id}
-          style={{ display: "none" }}
-          className="absolute top-0 left-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-base font-semibold whitespace-nowrap text-neutral-900 shadow-sm"
-        >
-          {p.label}
+        // The outer box is moved to the part; the inner card fades and rises in.
+        <div key={p.id} data-part={p.id} className="absolute top-0 left-0 whitespace-nowrap">
+          <div
+            data-card
+            data-shown="false"
+            className="invisible translate-y-2 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-base font-semibold text-neutral-900 opacity-0 shadow-sm transition-[opacity,visibility,translate] duration-300 ease-out data-[shown=true]:visible data-[shown=true]:translate-y-0 data-[shown=true]:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-none"
+          >
+            {p.label}
+          </div>
         </div>
       ))}
     </div>
@@ -270,6 +508,15 @@ export function toolbarInset(toolbar: HTMLElement | null, canvas: HTMLCanvasElem
 }
 
 const LABEL_GAP_PX = 8;
+const LABEL_STAGGER_MS = 120;
+
+/** Fades a label in (staggered by the part's order) or out; the CSS transition does the rest. */
+function setShown(card: HTMLElement, shown: boolean, part: ExplodePart) {
+  const value = String(shown);
+  if (card.dataset.shown === value) return;
+  card.dataset.shown = value;
+  card.style.transitionDelay = shown ? `${Math.max(0, part.rank) * LABEL_STAGGER_MS}ms` : "0ms";
+}
 const _top = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
 
@@ -305,12 +552,14 @@ export function ExplodeLabels({
     if (!root) return;
     const top = toolbarInset(toolbarRef.current, gl.domElement);
     const show = explosion.fullyExploded;
-    const items: { el: HTMLElement; x: number; y: number; dist: number }[] = [];
+    const cards: { card: HTMLElement; part: ExplodePart }[] = [];
+    const items: { el: HTMLElement; card: HTMLElement; part: ExplodePart; x: number; y: number; dist: number }[] = [];
     for (const p of plan) {
       const el = root.querySelector<HTMLElement>(`[data-part="${CSS.escape(p.id)}"]`);
-      if (!el) continue;
+      const card = el?.querySelector<HTMLElement>("[data-card]");
+      if (!el || !card) continue;
       const box = explosion.boxes.get(p.id);
-      el.style.display = "none";
+      cards.push({ card, part: p });
       if (!show || !box) continue;
       // Top centre of the part where it sits now.
       box.getCenter(_top).setY(box.max.y);
@@ -326,6 +575,8 @@ export function ExplodeLabels({
       if (_ndc.z > 1) continue;
       items.push({
         el,
+        card,
+        part: p,
         x: ((_ndc.x + 1) / 2) * size.width,
         y: ((1 - _ndc.y) / 2) * size.height,
         dist: camera.position.distanceTo(_top),
@@ -333,19 +584,19 @@ export function ExplodeLabels({
     }
     items.sort((a, b) => a.dist - b.dist);
     const placed: Placed[] = [];
+    const shown = new Set<HTMLElement>();
     for (const it of items) {
-      it.el.style.display = "block";
       const w = it.el.offsetWidth;
       const h = it.el.offsetHeight;
       const r = { x: it.x - w / 2, y: it.y - h - LABEL_GAP_PX, w, h };
       const inside = r.x >= 0 && r.y >= top && r.x + w <= size.width && r.y + h <= size.height;
-      if (!inside || placed.some((q) => overlaps(q, r))) {
-        it.el.style.display = "none";
-        continue;
-      }
+      if (!inside || placed.some((q) => overlaps(q, r))) continue;
       it.el.style.transform = `translate(${Math.round(r.x)}px, ${Math.round(r.y)}px)`;
+      shown.add(it.card);
       placed.push(r);
     }
+    // Labels that are hidden fade out where they were; shown ones fade in.
+    for (const { card, part } of cards) setShown(card, shown.has(card), part);
   });
   return null;
 }
