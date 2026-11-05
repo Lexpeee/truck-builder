@@ -2,7 +2,7 @@
 import { EXPLODE_TIMING, type ExplodePart } from "@/lib/explode";
 import { Line } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import * as THREE from "three";
 import type { Line2, LineMaterial } from "three-stdlib";
 
@@ -231,4 +231,104 @@ export function CenterLines({ explosion, plan }: { explosion: Explosion; plan: E
   return plan
     .filter((p) => p.rank >= 0)
     .map((p) => <CenterLine key={p.id} explosion={explosion} part={p} />);
+}
+
+/** DOM labels (no draw calls), positioned by ExplodeLabels. Hidden from screen readers: the live region announces. */
+export function LabelOverlay({
+  plan,
+  overlayRef,
+}: {
+  plan: ExplodePart[];
+  overlayRef: RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div ref={overlayRef} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      {plan.map((p) => (
+        <div
+          key={p.id}
+          data-part={p.id}
+          style={{ display: "none" }}
+          className="absolute top-0 left-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-base font-semibold whitespace-nowrap text-neutral-900 shadow-sm"
+        >
+          {p.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const LABEL_GAP_PX = 8;
+const _top = new THREE.Vector3();
+const _ndc = new THREE.Vector3();
+
+type Placed = { x: number; y: number; w: number; h: number };
+const overlaps = (a: Placed, b: Placed) =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/**
+ * Positions the labels once every part has arrived, on each rendered frame
+ * (orbiting, resizing). Nearest labels win; any label that would overlap one
+ * already placed, or leave the canvas, is hidden.
+ */
+export function ExplodeLabels({
+  explosion,
+  plan,
+  front,
+  overlayRef,
+}: {
+  explosion: Explosion;
+  plan: ExplodePart[];
+  /** Vehicle facing [x, z]: the chassis label sits over the cab, clear of the body's. */
+  front: [number, number];
+  overlayRef: RefObject<HTMLDivElement | null>;
+}) {
+  const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
+  useFrame(() => {
+    const root = overlayRef.current;
+    if (!root) return;
+    const show = explosion.fullyExploded;
+    const items: { el: HTMLElement; x: number; y: number; dist: number }[] = [];
+    for (const p of plan) {
+      const el = root.querySelector<HTMLElement>(`[data-part="${CSS.escape(p.id)}"]`);
+      if (!el) continue;
+      const box = explosion.boxes.get(p.id);
+      el.style.display = "none";
+      if (!show || !box) continue;
+      // Top centre of the part where it sits now.
+      box.getCenter(_top).setY(box.max.y);
+      _top.x += p.offset[0];
+      _top.y += p.offset[1];
+      _top.z += p.offset[2];
+      if (p.rank < 0) {
+        const len = box.getSize(_size);
+        _top.x += front[0] * len.x * 0.3;
+        _top.z += front[1] * len.z * 0.3;
+      }
+      _ndc.copy(_top).project(camera);
+      if (_ndc.z > 1) continue;
+      items.push({
+        el,
+        x: ((_ndc.x + 1) / 2) * size.width,
+        y: ((1 - _ndc.y) / 2) * size.height,
+        dist: camera.position.distanceTo(_top),
+      });
+    }
+    items.sort((a, b) => a.dist - b.dist);
+    const placed: Placed[] = [];
+    for (const it of items) {
+      it.el.style.display = "block";
+      const w = it.el.offsetWidth;
+      const h = it.el.offsetHeight;
+      const r = { x: it.x - w / 2, y: it.y - h - LABEL_GAP_PX, w, h };
+      const inside = r.x >= 0 && r.y >= 0 && r.x + w <= size.width && r.y + h <= size.height;
+      if (!inside || placed.some((q) => overlaps(q, r))) {
+        it.el.style.display = "none";
+        continue;
+      }
+      it.el.style.transform = `translate(${Math.round(r.x)}px, ${Math.round(r.y)}px)`;
+      placed.push(r);
+    }
+  });
+  return null;
 }

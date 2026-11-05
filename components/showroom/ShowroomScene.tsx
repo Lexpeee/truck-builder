@@ -34,6 +34,8 @@ import {
 import {
   CenterLines,
   ExplodeDriver,
+  ExplodeLabels,
+  LabelOverlay,
   ExplodeGroup,
   Explosion,
   easeInOut,
@@ -621,6 +623,7 @@ export default function ShowroomScene({
   /** Bumped when parts arrive, so baked shadows re-render once per animation. */
   const [settleCount, setSettleCount] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const labelsRef = useRef<HTMLDivElement>(null);
   const firstToggle = useRef(true);
   const [reduced, setReduced] = useState(false);
   // Orbit auto-rotate stops on click and resumes for the next vehicle.
@@ -780,7 +783,12 @@ export default function ShowroomScene({
           <FrameRateIndependentDamping />
           <AutoRotate enabled={animate && stoppedFor !== vehicleId} />
           <ViewTransition request={viewRequest} front={front} reduced={reduced} />
-          {explodable && <ExplodeDriver explosion={explosion} onSettled={handleSettled} />}
+          {explodable && (
+            <>
+              <ExplodeDriver explosion={explosion} onSettled={handleSettled} />
+              <ExplodeLabels explosion={explosion} plan={plan} front={front} overlayRef={labelsRef} />
+            </>
+          )}
         </>
       )}
       <Suspense fallback={null}>
@@ -798,6 +806,7 @@ export default function ShowroomScene({
         <ReadySignal onReady={handleReady} />
       </Suspense>
     </Canvas>
+    {explodable && <LabelOverlay plan={plan} overlayRef={labelsRef} />}
     {!turntable && (
       <div
         role="toolbar"
