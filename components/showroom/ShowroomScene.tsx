@@ -22,6 +22,7 @@ import {
 } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { EXPLODE_TIMING, explodePlan, type ExplodePart } from "@/lib/explode";
 import { PAINT_MATERIAL } from "@/lib/paint";
 import { getRenderBudget } from "@/lib/render-budget";
 import RenderStats, { statsEnabled } from "../three/RenderStats";
@@ -30,6 +31,18 @@ import {
   FrameRateIndependentDamping,
   RenderGate,
 } from "../three/render-loop";
+import {
+  CenterLines,
+  ExplodeCamera,
+  ExplodeDriver,
+  ExplodeLabels,
+  LabelOverlay,
+  fitExplodedRadius,
+  toolbarInset,
+  ExplodeGroup,
+  Explosion,
+  easeInOut,
+} from "./ExplodedParts";
 import {
   CAMERA,
   DISC,
@@ -69,6 +82,10 @@ type Props = {
   upfitIds: string[];
   /** Per catalog id, repaints that part's paint material; parts not listed keep their GLB colors. */
   partColors?: Record<string, MaterialColors>;
+  /** Orbit only: parts separated ("Show parts"). Omitted, the truck stays assembled. */
+  exploded?: boolean;
+  /** Shows the "Show parts" toggle in the orbit toolbar. */
+  onExplodedChange?: (exploded: boolean) => void;
   /** Optional GLB URL replacing the catalog build. */
   model?: string;
   theme: HeroTheme;
@@ -285,12 +302,17 @@ const Model = ({ url, position, colors }: Part & { colors?: MaterialColors }) =>
 function Truck({
   parts,
   partColors,
+  explosion,
+  plan,
   theme,
   spin,
   still,
 }: {
   parts: Part[];
   partColors?: Record<string, MaterialColors>;
+  /** Present when parts can be separated; `plan` gives each part's offset. */
+  explosion?: Explosion;
+  plan?: ExplodePart[];
   theme: HeroTheme;
   /** Present for the turntable: centers the parts and rotates the group. */
   spin?: Spin;
@@ -322,9 +344,18 @@ function Truck({
   return (
     <group ref={spinner}>
       <group ref={truck}>
-        {parts.map((p) => (
-          <Model key={p.url} {...p} colors={p.id ? partColors?.[p.id] : undefined} />
-        ))}
+        {parts.map((p) => {
+          const model = <Model {...p} colors={p.id ? partColors?.[p.id] : undefined} />;
+          const part = explosion && plan?.find((x) => x.id === p.id);
+          return part ? (
+            <ExplodeGroup key={p.url} explosion={explosion} part={part}>
+              {model}
+            </ExplodeGroup>
+          ) : (
+            <group key={p.url}>{model}</group>
+          );
+        })}
+        {explosion && plan && <CenterLines explosion={explosion} plan={plan} />}
       </group>
       <Ticks theme={theme} />
     </group>
@@ -364,7 +395,7 @@ const fitDistance = (aspect: number) =>
   Math.hypot(...ORBIT_CAMERA) * Math.max(1, FIT_ASPECT / aspect);
 
 /** OrbitControls fitted to the viewport, with zoom limited around that distance. */
-function OrbitRig() {
+function OrbitRig({ explodeFit }: { explodeFit: number | null }) {
   const camera = useThree((s) => s.camera);
   const aspect = useThree((s) => s.size.width / s.size.height);
   const fit = fitDistance(aspect);
@@ -377,7 +408,7 @@ function OrbitRig() {
       enableDamping
       enableZoom
       minDistance={fit * ZOOM.in}
-      maxDistance={fit * ZOOM.out}
+      maxDistance={Math.max(fit, explodeFit ?? 0) * ZOOM.out}
       enablePan={false}
       minPolarAngle={POLAR.min}
       maxPolarAngle={POLAR.max}
@@ -420,19 +451,27 @@ function viewSpherical(view: View, front: [number, number], radius: number) {
   }
 }
 
-const easeInOut = (k: number) =>
-  k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
-
 /** Eases the orbit camera to the requested preset; jumps under reduced motion. */
 function ViewTransition({
   request,
   front,
   reduced,
+  explodeFit,
+  explosion,
+  toolbarRef,
+  onExplodeFit,
 }: {
   request: { view: View; n: number } | null;
   front: [number, number];
   reduced: boolean;
+  /** While exploded, presets keep every part in view. */
+  explodeFit: number | null;
+  explosion?: Explosion;
+  toolbarRef: React.RefObject<HTMLElement | null>;
+  onExplodeFit: (radius: number) => void;
 }) {
+  const gl = useThree((s) => s.gl);
+  const height = useThree((s) => s.size.height);
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const aspect = useThree((s) => s.size.width / s.size.height);
@@ -448,11 +487,28 @@ function ViewTransition({
     const from = new THREE.Spherical().setFromVector3(
       camera.position.clone().sub(controls.target),
     );
-    const to = viewSpherical(request.view, front, fitDistance(aspect));
+    const to = viewSpherical(request.view, front, Math.max(fitDistance(aspect), explodeFit ?? 0));
+    if (explosion?.exploded) {
+      // Fit the separated parts from the new direction, not the old one.
+      const topFree = 1 - (2 * toolbarInset(toolbarRef.current, gl.domElement)) / height;
+      const r = fitExplodedRadius(
+        explosion,
+        camera as THREE.PerspectiveCamera,
+        controls.target,
+        Math.max(0.2, topFree),
+        new THREE.Vector3().setFromSpherical(to),
+      );
+      if (r > to.radius) {
+        to.radius = r;
+        onExplodeFit(r);
+      }
+    }
     // Go the short way round.
     to.theta = from.theta + Math.atan2(Math.sin(to.theta - from.theta), Math.cos(to.theta - from.theta));
     tween.current = { from, to, t0: performance.now() };
     invalidate();
+    // explodeFit is read when a preset is chosen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request, controls, camera, front, aspect, invalidate]);
 
   useFrame(() => {
@@ -574,6 +630,8 @@ export default function ShowroomScene({
   vehicleId,
   upfitIds,
   partColors,
+  exploded = false,
+  onExplodedChange,
   model,
   theme,
   lightsTheme = theme,
@@ -593,6 +651,23 @@ export default function ShowroomScene({
       .map(partFor);
   }, [model, vehicleId, upfitIds]);
   const [spin] = useState(() => new Spin());
+  const explodable = !turntable && !model;
+  const plan = useMemo(() => explodePlan(vehicleId, upfitIds), [vehicleId, upfitIds]);
+  const [explosion] = useState(() => new Explosion());
+  /** Bumped when parts arrive, so baked shadows re-render once per animation. */
+  const [settleCount, setSettleCount] = useState(0);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const labelsRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [explodeFit, setExplodeFit] = useState<number | null>(null);
+  /** Screen-reader announcement; empty until the first toggle so nothing is read on load. */
+  const [announcement, setAnnouncement] = useState("");
+  const toggleExploded = () => {
+    const next = !exploded;
+    setAnnouncement(next ? "Parts separated" : "Parts put back together");
+    onExplodedChange?.(next);
+  };
+  const firstToggle = useRef(true);
   const [reduced, setReduced] = useState(false);
   // Orbit auto-rotate stops on click and resumes for the next vehicle.
   const [stoppedFor, setStoppedFor] = useState<string | null>(null);
@@ -685,10 +760,30 @@ export default function ShowroomScene({
     };
   }, [inputTarget, turntable, spin, restartAuto]);
 
+  useLayoutEffect(() => explosion.setParts(plan), [explosion, plan]);
+
+  // Separate or reassemble. Reduced motion: no movement, a short cross-fade instead.
+  useEffect(() => {
+    if (!explodable) return;
+    explosion.toggle(exploded, performance.now(), reduced);
+    if (reduced && !firstToggle.current) {
+      wrapperRef.current?.animate([{ opacity: 0.3 }, { opacity: 1 }], {
+        duration: EXPLODE_TIMING.fadeMs,
+        easing: "ease-out",
+      });
+    }
+    firstToggle.current = false;
+    invalidateRef.current();
+    // `reduced` is read at toggle time only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exploded, explodable, explosion]);
+
+  const handleSettled = useCallback(() => setSettleCount((n) => n + 1), []);
+
   const animate = active && !still && !reduced && autoWindow;
 
   return (
-    <div>
+    <div ref={wrapperRef}>
     <Canvas
       frameloop="never"
       // Size changes only: tracking scroll re-measures the canvas on any scroll
@@ -715,7 +810,7 @@ export default function ShowroomScene({
     >
       <AdaptiveDpr />
       <PerformanceMonitor />
-      <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}`} />
+      <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}:${settleCount}`} />
       <RenderGate fps={budget.fps} active={active} />
       {statsEnabled() && <RenderStats />}
       <Lights theme={lightsTheme} />
@@ -727,10 +822,38 @@ export default function ShowroomScene({
         </>
       ) : (
         <>
-          <OrbitRig />
+          <OrbitRig explodeFit={explodeFit} />
           <FrameRateIndependentDamping />
           <AutoRotate enabled={animate && stoppedFor !== vehicleId} />
-          <ViewTransition request={viewRequest} front={front} reduced={reduced} />
+          <ViewTransition
+            request={viewRequest}
+            front={front}
+            reduced={reduced}
+            explodeFit={explodeFit}
+            explosion={explodable ? explosion : undefined}
+            toolbarRef={toolbarRef}
+            onExplodeFit={setExplodeFit}
+          />
+          {explodable && (
+            <>
+              <ExplodeDriver explosion={explosion} onSettled={handleSettled} />
+              <ExplodeCamera
+                explosion={explosion}
+                exploded={exploded}
+                reduced={reduced}
+                onFit={setExplodeFit}
+                assembledFit={fitDistance}
+                toolbarRef={toolbarRef}
+              />
+              <ExplodeLabels
+                explosion={explosion}
+                plan={plan}
+                front={front}
+                overlayRef={labelsRef}
+                toolbarRef={toolbarRef}
+              />
+            </>
+          )}
         </>
       )}
       <Suspense fallback={null}>
@@ -739,6 +862,8 @@ export default function ShowroomScene({
         <Truck
           parts={parts}
           partColors={partColors}
+          explosion={explodable ? explosion : undefined}
+          plan={plan}
           theme={theme}
           spin={turntable ? spin : undefined}
           still={still}
@@ -746,8 +871,10 @@ export default function ShowroomScene({
         <ReadySignal onReady={handleReady} />
       </Suspense>
     </Canvas>
+    {explodable && <LabelOverlay plan={plan} overlayRef={labelsRef} />}
     {!turntable && (
       <div
+        ref={toolbarRef}
         role="toolbar"
         aria-label="Camera view"
         className="absolute inset-x-0 top-3 flex flex-wrap justify-center gap-2 px-3"
@@ -762,6 +889,19 @@ export default function ShowroomScene({
             {v.label}
           </button>
         ))}
+        {explodable && onExplodedChange && (
+          <button
+            type="button"
+            aria-pressed={exploded}
+            onClick={toggleExploded}
+            className="min-h-12 rounded-full border bg-background/90 px-4 text-base font-semibold shadow-sm backdrop-blur transition-colors hover:border-primary focus-visible:ring-3 focus-visible:ring-ring/50 outline-none aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+          >
+            {exploded ? "Put back together" : "Show parts"}
+          </button>
+        )}
+        <p aria-live="polite" className="sr-only">
+          {announcement}
+        </p>
       </div>
     )}
     </div>
