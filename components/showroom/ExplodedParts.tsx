@@ -1,8 +1,10 @@
 "use client";
 import { EXPLODE_TIMING, type ExplodePart } from "@/lib/explode";
+import { Line } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import * as THREE from "three";
+import type { Line2, LineMaterial } from "three-stdlib";
 
 export const easeInOut = (k: number) =>
   k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
@@ -161,4 +163,72 @@ export function ExplodeGroup({
 
   useFrame(place, -2);
   return <group ref={ref}>{children}</group>;
+}
+
+/**
+ * Where a part meets the truck: its box centre pushed back against the
+ * direction it moves (bottom for parts lifted up, front face for a bumper).
+ */
+export function mountAnchor(box: THREE.Box3, offset: readonly number[], out: THREE.Vector3) {
+  const dir = _dir.fromArray(offset).normalize();
+  const half = box.getSize(_size).multiplyScalar(0.5);
+  const reach = Math.abs(dir.x) * half.x + Math.abs(dir.y) * half.y + Math.abs(dir.z) * half.z;
+  return box.getCenter(out).addScaledVector(dir, -reach);
+}
+
+const _dir = new THREE.Vector3();
+const _a = new THREE.Vector3();
+
+const LINE = { color: "#8A93A1", width: 1.5, dash: 0.08, gap: 0.06 };
+const PLACEHOLDER: [number, number, number][] = [
+  [0, 0, 0],
+  [0, 0.01, 0],
+];
+
+/** Dashed line from a part's mount to where it sits now; grows with the explosion and fades on the way back. */
+function CenterLine({ explosion, part }: { explosion: Explosion; part: ExplodePart }) {
+  const ref = useRef<Line2>(null);
+  useFrame(() => {
+    const line = ref.current!;
+    const box = explosion.boxes.get(part.id);
+    const e = explosion.eased(part.id);
+    line.visible = !!box && e > 0.001;
+    if (!line.visible) return;
+    const a = mountAnchor(box!, part.offset, _a);
+    const [ox, oy, oz] = part.offset;
+    // Rewrite the one segment in place (no new GPU buffers per frame).
+    const g = line.geometry;
+    const pos = (g.attributes.instanceStart as THREE.InterleavedBufferAttribute).data;
+    pos.array.set([a.x, a.y, a.z, a.x + ox * e, a.y + oy * e, a.z + oz * e]);
+    pos.needsUpdate = true;
+    const dist = (g.attributes.instanceDistanceStart as THREE.InterleavedBufferAttribute).data;
+    dist.array[0] = 0;
+    dist.array[1] = Math.hypot(ox, oy, oz) * e;
+    dist.needsUpdate = true;
+    (line.material as LineMaterial).opacity = e;
+  }, -1);
+  return (
+    <Line
+      ref={ref}
+      points={PLACEHOLDER}
+      color={LINE.color}
+      lineWidth={LINE.width}
+      dashed
+      dashSize={LINE.dash}
+      gapSize={LINE.gap}
+      transparent
+      depthWrite={false}
+      frustumCulled={false}
+      castShadow={false}
+      receiveShadow={false}
+      raycast={() => null}
+    />
+  );
+}
+
+/** One centerline per moving part. */
+export function CenterLines({ explosion, plan }: { explosion: Explosion; plan: ExplodePart[] }) {
+  return plan
+    .filter((p) => p.rank >= 0)
+    .map((p) => <CenterLine key={p.id} explosion={explosion} part={p} />);
 }

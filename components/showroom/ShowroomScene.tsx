@@ -31,7 +31,13 @@ import {
   FrameRateIndependentDamping,
   RenderGate,
 } from "../three/render-loop";
-import { ExplodeDriver, ExplodeGroup, Explosion, easeInOut } from "./ExplodedParts";
+import {
+  CenterLines,
+  ExplodeDriver,
+  ExplodeGroup,
+  Explosion,
+  easeInOut,
+} from "./ExplodedParts";
 import {
   CAMERA,
   DISC,
@@ -342,6 +348,7 @@ function Truck({
             <group key={p.url}>{model}</group>
           );
         })}
+        {explosion && plan && <CenterLines explosion={explosion} plan={plan} />}
       </group>
       <Ticks theme={theme} />
     </group>
