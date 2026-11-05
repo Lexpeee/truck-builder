@@ -8,7 +8,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { previewToggle, type Build } from "@/lib/builder";
+import { paintTargets, previewToggle, type Build, type PaintTarget } from "@/lib/builder";
 import { useBuilderStore } from "@/lib/builder-store";
 import {
   CATEGORIES,
@@ -18,9 +18,11 @@ import {
   upfitsForVehicle,
   type Upfit,
 } from "@/lib/catalog";
+import PaintChip from "@/components/builder/PaintChip";
 import SubmitBuildDialog from "@/components/builder/SubmitBuildDialog";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, CircleCheck, Info, X } from "lucide-react";
+import { PAINT_COLORS, type PaintColorId } from "@/lib/paint";
+import { ChevronDown, CircleCheck, Info, Printer, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 /** Radio value for "no upfit installed" in an exclusive category. */
@@ -60,11 +62,14 @@ function Field({
   title,
   aside,
   value,
+  paint,
   children,
 }: {
   title: string;
   aside?: string;
   value: string;
+  /** Color pickers for what this field selects, shown beside its dropdown. */
+  paint?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -73,8 +78,9 @@ function Field({
         {title}
         {aside && <span className="font-normal normal-case">{aside}</span>}
       </h2>
+      <div className="flex gap-2">
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2 text-left text-lg font-semibold transition-colors outline-none hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:border-primary">
+        <DropdownMenuTrigger className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2 text-left text-lg font-semibold transition-colors outline-none hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:border-primary">
           <span className="truncate">{value}</span>
           <ChevronDown className="size-5 shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>
@@ -82,11 +88,57 @@ function Field({
           {children}
         </DropdownMenuContent>
       </DropdownMenu>
+      {paint}
+      </div>
     </section>
   );
 }
 
 const itemClassName = "min-h-12 rounded-lg py-2";
+
+/**
+ * Swatch-only color dropdown for one painted part. Names stay available to
+ * screen readers (and as tooltips); the selected swatch shows a check mark.
+ */
+function PaintDropdown({
+  target,
+  onChange,
+}: {
+  target: PaintTarget;
+  onChange: (color: PaintColorId) => void;
+}) {
+  const current = `${target.label}: ${target.color.name}`;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={current}
+        title={current}
+        className="flex size-12 shrink-0 items-center justify-center rounded-xl border bg-card transition-colors outline-none hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:border-primary"
+      >
+        <PaintChip hex={target.color.hex} className="size-7" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="rounded-xl p-1.5">
+        <DropdownMenuRadioGroup
+          value={target.color.id}
+          onValueChange={(id) => onChange(id as PaintColorId)}
+        >
+          {PAINT_COLORS.map((color) => (
+            <DropdownMenuRadioItem
+              key={color.id}
+              value={color.id}
+              closeOnClick
+              title={color.name}
+              className="min-h-12 min-w-20 rounded-lg py-2 pr-9"
+            >
+              <PaintChip hex={color.hex} className="size-8" />
+              <span className="sr-only">{color.name}</span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 /** How long the "quote sent" confirmation stays visible. */
 const QUOTE_SENT_MS = 8000;
@@ -96,9 +148,17 @@ export default function BuilderPanel() {
   const notices = useBuilderStore((s) => s.notices);
   const onChangeVehicle = useBuilderStore((s) => s.changeVehicle);
   const onToggleUpfit = useBuilderStore((s) => s.toggleUpfit);
+  const onSetPaint = useBuilderStore((s) => s.setPaint);
   const onDismissNotices = useBuilderStore((s) => s.dismissNotices);
   const available = upfitsForVehicle(build.vehicleId);
   const installed = new Set(build.upfitIds);
+  const [vehiclePaint, ...upfitPaint] = paintTargets(build);
+  const paintFor = (targets: PaintTarget[]) =>
+    targets.length ? (
+      targets.map((t) => (
+        <PaintDropdown key={t.id} target={t} onChange={(color) => onSetPaint(t.id, color)} />
+      ))
+    ) : undefined;
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [quoteSent, setQuoteSent] = useState(false);
@@ -112,7 +172,11 @@ export default function BuilderPanel() {
   return (
     <div className="flex min-h-full flex-col">
       <div className="flex flex-col gap-5 p-5">
-        <Field title="Vehicle" value={getVehicle(build.vehicleId)?.name ?? ""}>
+        <Field
+          title="Vehicle"
+          value={getVehicle(build.vehicleId)?.name ?? ""}
+          paint={paintFor([vehiclePaint])}
+        >
           <DropdownMenuRadioGroup
             value={build.vehicleId}
             onValueChange={(id) => onChangeVehicle(id as string)}
@@ -164,6 +228,7 @@ export default function BuilderPanel() {
               title={category.label}
               aside={category.exclusive ? "Choose one" : "Choose any"}
               value={label}
+              paint={paintFor(upfitPaint.filter((t) => t.upfit!.category === category.id))}
             >
               {category.exclusive ? (
                 <DropdownMenuRadioGroup
@@ -215,6 +280,7 @@ export default function BuilderPanel() {
             </Field>
           );
         })}
+
       </div>
 
       <section className="sticky bottom-0 mt-auto border-t bg-background/95 p-5 backdrop-blur">
@@ -246,8 +312,22 @@ export default function BuilderPanel() {
                 ? nameList(build.upfitIds)
                 : "Stock vehicle, no upfits."}
             </p>
+            <p className="text-base text-muted-foreground">
+              {paintTargets(build)
+                .map(({ label, color }) => `${label}: ${color.name}`)
+                .join(" · ")}
+            </p>
           </div>
-          <Button onClick={() => setSubmitOpen(true)} className="h-12 px-5 text-base">Submit New Build</Button>
+          <div className="flex shrink-0 flex-col gap-2">
+            <Button onClick={() => setSubmitOpen(true)} className="h-12 px-5 text-base">Submit New Build</Button>
+            <Button
+              variant="outline"
+              onClick={() => window.print()}
+              className="h-12 px-5 text-base"
+            >
+              <Printer /> Print spec sheet
+            </Button>
+          </div>
         </div>
         <SubmitBuildDialog
           open={submitOpen}

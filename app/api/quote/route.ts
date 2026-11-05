@@ -1,4 +1,5 @@
 import axios from "axios";
+import { PAINT_COLORS } from "@/lib/paint";
 import type { BuildSubmission } from "@/lib/submit-build";
 
 const REQUIRED_CUSTOMER_FIELDS = [
@@ -16,10 +17,19 @@ const REQUIRED_CUSTOMER_FIELDS = [
 
 const isText = (v: unknown) => typeof v === "string" && v.trim() !== "";
 
+/** Only the offered presets, so sales never receives a made-up color. */
+const isPaint = (p: unknown) =>
+  PAINT_COLORS.some(
+    (c) => c.name === (p as { name?: unknown })?.name && c.hex === (p as { hex?: unknown })?.hex,
+  );
+
 const isValid = (s: BuildSubmission) =>
   isText(s?.build?.vehicle) &&
   Array.isArray(s.build.upfits) &&
   s.build.upfits.every((u) => typeof u === "string") &&
+  isPaint(s.build.paint?.vehicle) &&
+  Array.isArray(s.build.paint.upfits) &&
+  s.build.paint.upfits.every((p) => s.build.upfits.includes(p?.upfit) && isPaint(p)) &&
   REQUIRED_CUSTOMER_FIELDS.every((f) => isText(s.customer?.[f]));
 
 /**

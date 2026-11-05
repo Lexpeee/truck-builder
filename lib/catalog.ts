@@ -32,12 +32,14 @@ export type CategoryInfo = {
   label: string;
   /** Only one upfit from an exclusive category can be installed at a time. */
   exclusive: boolean;
+  /** Its models carry the "upfit-paint" material and follow the upfit paint color. */
+  painted: boolean;
 };
 
 export const CATEGORIES: CategoryInfo[] = [
-  { id: "body", label: "Body", exclusive: true },
-  { id: "rack", label: "Racks", exclusive: false },
-  { id: "bumper", label: "Bumpers", exclusive: true },
+  { id: "body", label: "Body", exclusive: true, painted: true },
+  { id: "rack", label: "Racks", exclusive: false, painted: true },
+  { id: "bumper", label: "Bumpers", exclusive: true, painted: false },
 ];
 
 export const VEHICLES: Vehicle[] = [

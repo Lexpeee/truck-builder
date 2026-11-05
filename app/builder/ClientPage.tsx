@@ -1,6 +1,7 @@
 "use client";
 import BuilderPanel from "@/components/builder/BuilderPanel";
 import Scene from "@/components/builder/Scene";
+import SpecSheet from "@/components/builder/SpecSheet";
 import { useBuilderStore } from "@/lib/builder-store";
 import { getVehicle } from "@/lib/catalog";
 import { Rotate3d, Truck } from "lucide-react";
@@ -10,7 +11,9 @@ export default function TruckBuilder() {
   const vehicleId = useBuilderStore((s) => s.build.vehicleId);
 
   return (
-    <div className="flex h-dvh w-full flex-col">
+    <>
+    <SpecSheet />
+    <div className="flex h-dvh w-full flex-col print:hidden">
       <header className="z-10 flex h-14 shrink-0 items-center gap-3 border-b bg-background px-4">
         <Link
           href="/"
@@ -42,5 +45,6 @@ export default function TruckBuilder() {
         </aside>
       </div>
     </div>
+    </>
   );
 }

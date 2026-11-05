@@ -17,7 +17,8 @@ import {
 } from "@gltf-transform/functions";
 import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
 import sharp from "sharp";
-import { UPFITS, VEHICLES } from "../lib/catalog.ts";
+import { CATEGORIES, UPFITS, VEHICLES } from "../lib/catalog.ts";
+import { PAINT_MATERIAL } from "../lib/paint.ts";
 
 // §2 triangle and material budgets, §3 texture caps. Keyed by role.
 const BUDGETS = {
@@ -33,12 +34,17 @@ await MeshoptEncoder.ready;
 const io = new NodeIO()
   .registerExtensions(ALL_EXTENSIONS)
   .registerDependencies({ "meshopt.decoder": MeshoptDecoder, "meshopt.encoder": MeshoptEncoder });
+// §3: the builder recolors these materials by name, so they must exist and be untextured.
 const models = [
-  ...VEHICLES.map((v) => ({ file: v.fileName, role: "chassis" })),
-  ...UPFITS.map((u) => ({ file: u.fileName, role: u.category })),
+  ...VEHICLES.map((v) => ({ file: v.fileName, role: "chassis", paint: PAINT_MATERIAL.vehicle })),
+  ...UPFITS.map((u) => ({
+    file: u.fileName,
+    role: u.category,
+    paint: CATEGORIES.find((c) => c.id === u.category).painted ? PAINT_MATERIAL.upfit : null,
+  })),
 ];
 
-function report(doc, path, role) {
+function report(doc, path, role, paint) {
   const root = doc.getRoot();
   const budget = BUDGETS[role];
   let triangles = 0;
@@ -67,7 +73,10 @@ function report(doc, path, role) {
       .filter((n) => n.getMesh() && !n.getExtension("EXT_mesh_gpu_instancing"))
       .map((n) => getBounds(n).min[1]),
   );
+  const paintMats = root.listMaterials().filter((m) => m.getName() === paint);
   const problems = [
+    paint && paintMats.length !== 1 && `needs exactly one "${paint}" material, found ${paintMats.length}`,
+    paintMats.some((m) => m.getBaseColorTexture()) && `"${paint}" has a base color texture (paint is a parameter)`,
     triangles > budget.triangles && `triangles ${Math.round(triangles)} > ${budget.triangles}`,
     materials > budget.materials && `materials ${materials} > ${budget.materials}`,
     texture > budget.texture && `texture ${texture}px > ${budget.texture}px`,
@@ -86,14 +95,15 @@ function report(doc, path, role) {
 }
 
 let allOk = true;
-for (const { file, role } of models) {
+for (const { file, role, paint } of models) {
   const path = `public/models/${file}`;
   const doc = await io.readBinary(readFileSync(path));
   if (!checkOnly) {
     await doc.transform(
       // §3: PBR metal/rough only. three.js no longer reads spec/gloss at all.
       metalRough(),
-      dedup(),
+      // Names matter: the paint materials are found by name.
+      dedup({ keepUniqueNames: true }),
       // §2 draw calls: merge parts that share a material and never move separately.
       flatten(),
       join(),
@@ -108,6 +118,6 @@ for (const { file, role } of models) {
     );
     await io.write(path, doc);
   }
-  allOk = report(doc, path, role) && allOk;
+  allOk = report(doc, path, role, paint) && allOk;
 }
 if (checkOnly && !allOk) process.exit(1);

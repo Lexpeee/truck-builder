@@ -12,6 +12,7 @@ import {
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Suspense,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -21,6 +22,7 @@ import {
 } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { PAINT_MATERIAL } from "@/lib/paint";
 import { getRenderBudget } from "@/lib/render-budget";
 import RenderStats, { statsEnabled } from "../three/RenderStats";
 import {
@@ -43,9 +45,20 @@ import {
 
 const TICK_COUNT = 36 * 2;
 
-type Part = { url: string; position?: [number, number, number] };
+/** `id` is the catalog id, absent for a `model` override. */
+type Part = { id?: string; url: string; position?: [number, number, number] };
 
-const partFor = (item: { fileName: string; position?: [number, number, number] }): Part => ({
+/** Paint material name -> sRGB hex. Materials not listed keep their GLB color. */
+type MaterialColors = Record<string, string>;
+
+const PAINT_MATERIALS = new Set<string>(Object.values(PAINT_MATERIAL));
+
+const partFor = (item: {
+  id: string;
+  fileName: string;
+  position?: [number, number, number];
+}): Part => ({
+  id: item.id,
   url: `/models/${item.fileName}`,
   position: item.position,
 });
@@ -54,6 +67,8 @@ type Props = {
   /** The vehicle and its installed upfits, rendered in catalog order. */
   vehicleId: string;
   upfitIds: string[];
+  /** Per catalog id, repaints that part's paint material; parts not listed keep their GLB colors. */
+  partColors?: Record<string, MaterialColors>;
   /** Optional GLB URL replacing the catalog build. */
   model?: string;
   theme: HeroTheme;
@@ -223,29 +238,59 @@ function disposeObject(root: THREE.Object3D) {
   });
 }
 
-const Model = ({ url, position }: Part) => {
+const Model = ({ url, position, colors }: Part & { colors?: MaterialColors }) => {
   const { scene } = useGLTF(url);
+  const invalidate = useThree((s) => s.invalidate);
   // Clone so the same GLB can be re-mounted without stealing the cached scene.
-  const object = useMemo(() => {
+  // scene.clone shares materials with the cache, so paint materials get their
+  // own copy: repainting this truck never repaints another (hero vs builder).
+  const { object, paint } = useMemo(() => {
     const o = scene.clone(true);
+    const own = new Map<THREE.Material, THREE.MeshStandardMaterial>();
     o.traverse((c) => {
       const m = c as THREE.Mesh;
-      if (m.isMesh) m.castShadow = m.receiveShadow = true;
+      if (!m.isMesh) return;
+      m.castShadow = m.receiveShadow = true;
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (!PAINT_MATERIALS.has(mat.name)) return;
+      if (!own.has(mat)) own.set(mat, mat.clone());
+      m.material = own.get(mat)!;
     });
-    return o;
+    return { object: o, paint: [...own.values()] };
   }, [scene]);
   useEffect(() => () => disposeObject(object), [object]);
+
+  // Before the frame is drawn, so a new model never flashes its GLB color.
+  useLayoutEffect(() => {
+    if (!colors) return;
+    const next = new THREE.Color();
+    let changed = false;
+    for (const mat of paint) {
+      const hex = colors[mat.name];
+      if (!hex) continue;
+      // Hex is sRGB; Color stores linear (ColorManagement), as the renderer expects.
+      next.setStyle(hex, THREE.SRGBColorSpace);
+      if (mat.color.equals(next)) continue;
+      mat.color.copy(next);
+      changed = true;
+    }
+    // One frame, not a loop: RenderGate merges the models' requests.
+    if (changed) invalidate();
+  }, [paint, colors, invalidate]);
+
   return <primitive object={object} position={position} />;
 };
 
 /** Sits the parts on the disc with the ticks; the turntable also spins them. */
 function Truck({
   parts,
+  partColors,
   theme,
   spin,
   still,
 }: {
   parts: Part[];
+  partColors?: Record<string, MaterialColors>;
   theme: HeroTheme;
   /** Present for the turntable: centers the parts and rotates the group. */
   spin?: Spin;
@@ -278,7 +323,7 @@ function Truck({
     <group ref={spinner}>
       <group ref={truck}>
         {parts.map((p) => (
-          <Model key={p.url} {...p} />
+          <Model key={p.url} {...p} colors={p.id ? partColors?.[p.id] : undefined} />
         ))}
       </group>
       <Ticks theme={theme} />
@@ -441,10 +486,20 @@ const ORBIT_RATE = (2 * Math.PI) / 60;
  */
 function AutoRotate({ enabled }: { enabled: boolean }) {
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
+  const get = useThree((s) => s.get);
   const onTick = useCallback(
-    (dt: number) =>
-      controls?.setAzimuthalAngle(controls.getAzimuthalAngle() - ORBIT_RATE * dt),
-    [controls],
+    (dt: number) => {
+      const c = get().controls as OrbitControlsImpl | null;
+      if (!c) return;
+      // Undamped step: with damping, each tick leaves most of its rotation
+      // pending, so after auto-rotate stops every later frame (a paint change)
+      // would nudge the camera and request extra frames.
+      const damping = c.enableDamping;
+      c.enableDamping = false;
+      c.setAzimuthalAngle(c.getAzimuthalAngle() - ORBIT_RATE * dt);
+      c.enableDamping = damping;
+    },
+    [get],
   );
   return (
     <FrameCap enabled={enabled && !!controls} fps={AUTO_ROTATE_FPS} onTick={onTick} />
@@ -463,9 +518,11 @@ function OrbitFill() {
 
 /**
  * Studio reflections for both views (3D-MODELING-GUIDELINES §4): overhead and
- * side strips, rendered once, never shown as background.
+ * side strips, rendered once, never shown as background. Memoized: drei
+ * re-renders the cubemap whenever its children change identity, i.e. on every
+ * parent render (a paint change, a view preset).
  */
-function StudioEnvironment() {
+const StudioEnvironment = memo(function StudioEnvironment() {
   return (
     <>
       <Environment resolution={256} frames={1}>
@@ -503,11 +560,20 @@ function StudioEnvironment() {
       </Environment>
     </>
   );
-}
+});
+
+/**
+ * Contact shadows baked in one frame. drei restarts the bake on every render,
+ * so render only when `version` changes: when the parts change or finish loading.
+ */
+const BakedShadows = memo(function BakedShadows({ version }: { version: string }) {
+  return <ContactShadows key={version} frames={1} />;
+});
 
 export default function ShowroomScene({
   vehicleId,
   upfitIds,
+  partColors,
   model,
   theme,
   lightsTheme = theme,
@@ -622,9 +688,13 @@ export default function ShowroomScene({
   const animate = active && !still && !reduced && autoWindow;
 
   return (
-    <>
+    <div>
     <Canvas
       frameloop="never"
+      // Size changes only: tracking scroll re-measures the canvas on any scroll
+      // in the page (e.g. the builder panel) and draws a frame for nothing.
+      // Pointer events use offsetX/Y, so the canvas position isn't needed.
+      resize={{ scroll: false }}
       shadows="soft"
       dpr={[1, budget.maxDpr]}
       onClick={turntable ? undefined : () => setStoppedFor(vehicleId)}
@@ -635,7 +705,9 @@ export default function ShowroomScene({
       gl={{
         antialias: true,
         alpha: true,
-        toneMapping: THREE.ACESFilmicToneMapping,
+        // ACES shifts hue and saturation, so the builder's paint would not match its
+        // swatches; Neutral keeps colors true. The hero keeps its ACES look.
+        toneMapping: turntable ? THREE.ACESFilmicToneMapping : THREE.NeutralToneMapping,
         toneMappingExposure: turntable ? SCENE_THEMES[theme].exposure : 1,
       }}
       camera={{ position: ORBIT_CAMERA, fov: 30 }}
@@ -643,7 +715,7 @@ export default function ShowroomScene({
     >
       <AdaptiveDpr />
       <PerformanceMonitor />
-      <ContactShadows frames={1} />
+      <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}`} />
       <RenderGate fps={budget.fps} active={active} />
       {statsEnabled() && <RenderStats />}
       <Lights theme={lightsTheme} />
@@ -666,6 +738,7 @@ export default function ShowroomScene({
         {!turntable && <OrbitFill />}
         <Truck
           parts={parts}
+          partColors={partColors}
           theme={theme}
           spin={turntable ? spin : undefined}
           still={still}
@@ -691,6 +764,6 @@ export default function ShowroomScene({
         ))}
       </div>
     )}
-    </>
+    </div>
   );
 }

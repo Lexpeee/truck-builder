@@ -26,8 +26,16 @@ export type CompleteAddress = {
   country: string;
 }
 
+/** A paint preset as sales sees it: its name and sRGB hex. */
+export type PaintSpec = { name: string; hex: string };
+
 export type BuildSubmission = {
-  build: { vehicle: string; upfits: string[] };
+  build: {
+    vehicle: string;
+    upfits: string[];
+    /** The vehicle's color, and one per installed painted upfit (bodies and racks). */
+    paint: { vehicle: PaintSpec; upfits: ({ upfit: string } & PaintSpec)[] };
+  };
   customer: CustomerDetails;
 };
 

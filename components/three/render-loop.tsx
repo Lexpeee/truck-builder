@@ -50,7 +50,10 @@ export function RenderGate({ fps, active = true }: { fps: number; active?: boole
   }, [get, set, advance, fps, active]);
 
   // Resizes bypass `invalidate`, and the drawing buffer is cleared by them.
-  useEffect(() => get().invalidate(), [get, size, gl]);
+  // Depend on the dimensions: R3F hands out a new `size` object on every
+  // Canvas render, which would add a frame to any prop change (e.g. paint).
+  const { width, height } = size;
+  useEffect(() => get().invalidate(), [get, width, height, gl]);
   return null;
 }
 

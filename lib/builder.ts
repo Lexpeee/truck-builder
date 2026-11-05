@@ -5,9 +5,10 @@ import {
   upfitsForVehicle,
   type Upfit,
 } from "./catalog";
+import { DEFAULT_PAINT, getPaintColor, type Paint, type PaintColor } from "./paint";
 
-/** A build is a vehicle plus a set of installed upfit ids. */
-export type Build = { vehicleId: string; upfitIds: string[] };
+/** A build is a vehicle, a set of installed upfit ids, and its paint colors. */
+export type Build = { vehicleId: string; upfitIds: string[]; paint: Paint };
 
 export type BuildResult = {
   build: Build;
@@ -99,12 +100,40 @@ export const toggleUpfit = (build: Build, id: string): BuildResult => {
   };
 };
 
-export const changeVehicle = (vehicleId: string): Build => {
+/** Switch vehicles with its default upfits; the chosen paint carries over. */
+export const changeVehicle = (vehicleId: string, paint: Paint = DEFAULT_PAINT): Build => {
   const vehicle = getVehicle(vehicleId);
   const installed = new Set<string>();
   vehicle?.defaultUpfitIds.forEach((id) => install(id, installed, []));
-  return { vehicleId, upfitIds: orderedIds(vehicleId, installed) };
+  return { vehicleId, upfitIds: orderedIds(vehicleId, installed), paint };
 };
+
+export type PaintTarget = {
+  /** Catalog id of the painted part: the vehicle or an upfit. */
+  id: string;
+  label: string;
+  /** Set for upfits; absent for the vehicle. */
+  upfit?: Upfit;
+  color: PaintColor;
+};
+
+/**
+ * Every painted part of the build with its color, for the pickers, the scene,
+ * summaries, the spec sheet and the quote: the vehicle, then each installed
+ * body or rack in catalog order.
+ */
+export const paintTargets = (build: Build): PaintTarget[] => [
+  { id: build.vehicleId, label: "Vehicle paint", color: getPaintColor(build.paint.vehicle)! },
+  ...build.upfitIds
+    .map(getUpfit)
+    .filter((u): u is Upfit => !!u && getCategory(u.category).painted)
+    .map((u) => ({
+      id: u.id,
+      label: `${u.name} paint`,
+      upfit: u,
+      color: getPaintColor(build.paint.upfits[u.id] ?? build.paint.vehicle)!,
+    })),
+];
 
 /** Catalog order keeps rendering and summaries stable. */
 const orderedIds = (vehicleId: string, installed: Set<string>) =>

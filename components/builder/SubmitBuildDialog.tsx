@@ -8,10 +8,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { Build } from "@/lib/builder";
+import { paintTargets, type Build } from "@/lib/builder";
 import { useBuilderStore } from "@/lib/builder-store";
 import { getCategory, getUpfit, getVehicle } from "@/lib/catalog";
-import { submitBuild, type CustomerDetails } from "@/lib/submit-build";
+import {
+  submitBuild,
+  type BuildSubmission,
+  type CustomerDetails,
+} from "@/lib/submit-build";
+import PaintChip from "./PaintChip";
 import { useState, type FormEvent } from "react";
 
 type FieldSpec = {
@@ -119,9 +124,33 @@ function BuildSummary({ build }: { build: Build }) {
           Stock vehicle, no upfits.
         </p>
       )}
+      <ul className="mt-2 divide-y border-t text-base">
+        {paintTargets(build).map(({ id, label, color }) => (
+          <li key={id} className="flex justify-between gap-4 py-1.5">
+            <span>{label}</span>
+            <span className="flex items-center gap-2">
+              <PaintChip hex={color.hex} />
+              {color.name}
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
+
+/** The build's colors as sales receives them: names and hex values, keyed by part name. */
+const paintSpec = (build: Build): BuildSubmission["build"]["paint"] => {
+  const [vehicle, ...upfits] = paintTargets(build);
+  const spec = ({ color }: { color: { name: string; hex: string } }) => ({
+    name: color.name,
+    hex: color.hex,
+  });
+  return {
+    vehicle: spec(vehicle),
+    upfits: upfits.map((t) => ({ upfit: t.upfit!.name, ...spec(t) })),
+  };
+};
 
 /** Mounted only while the dialog is open, so it starts fresh every time. */
 function SubmitBuildForm({
@@ -147,6 +176,7 @@ function SubmitBuildForm({
         build: {
           vehicle: getVehicle(build.vehicleId)?.name ?? build.vehicleId,
           upfits: build.upfitIds.map((id) => getUpfit(id)?.name ?? id),
+          paint: paintSpec(build),
         },
         customer: {
           ...customer, 

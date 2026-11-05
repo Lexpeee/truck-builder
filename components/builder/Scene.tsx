@@ -1,8 +1,10 @@
 "use client";
 import { useBuilderStore } from "@/lib/builder-store";
 import { getVehicle } from "@/lib/catalog";
+import { paintTargets } from "@/lib/builder";
+import { PAINT_MATERIAL } from "@/lib/paint";
 import { useProgress } from "@react-three/drei";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ShowroomScene from "../showroom/ShowroomScene";
 
@@ -29,21 +31,41 @@ const LoadingOverlay = () => {
 export default function Scene() {
   const vehicleId = useBuilderStore((s) => s.build.vehicleId);
   const upfitIds = useBuilderStore((s) => s.build.upfitIds);
+  const build = useBuilderStore((s) => s.build);
   const [ready, setReady] = useState(false);
+  // Catalog id -> its paint material's sRGB hex, e.g. { "ram-696j-body": { "upfit-paint": "#1F5EFF" } }.
+  const partColors = useMemo(
+    () =>
+      Object.fromEntries(
+        paintTargets(build).map((t) => [
+          t.id,
+          { [t.upfit ? PAINT_MATERIAL.upfit : PAINT_MATERIAL.vehicle]: t.color.hex },
+        ]),
+      ),
+    [build],
+  );
 
   return (
     <>
       <Helmet>
         <title>{getVehicle(vehicleId)?.name || "Showroom"} | NWT Truck Builder</title>
       </Helmet>
-      <ShowroomScene
-        vehicleId={vehicleId}
-        upfitIds={upfitIds}
-        interaction="orbit"
-        theme="light"
-        lightsTheme="dark"
-        onReady={setReady}
-      />
+      <div 
+        className="absolute inset-0 z-0"
+        style={{
+          background: `url(/images/showroom-bg.png) center/cover no-repeat`,
+        }}
+      >
+        <ShowroomScene
+          vehicleId={vehicleId}
+          upfitIds={upfitIds}
+          partColors={partColors}
+          interaction="orbit"
+          theme="light"
+          lightsTheme="dark"
+          onReady={setReady}
+        />
+      </div>
       {!ready && <LoadingOverlay />}
     </>
   );
