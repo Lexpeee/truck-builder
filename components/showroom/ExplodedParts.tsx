@@ -115,20 +115,26 @@ export function ExplodeDriver({
   return null;
 }
 
-/** Ignore tiny meshes (each upfit GLB has a 24-vertex marker cube at the origin). */
-const MIN_MESH_SIZE = 0.1;
+/**
+ * Each upfit GLB carries a small marker cube at the origin. Left in, it would
+ * stretch a part's bounds to the origin (e.g. a rear bumper reaching the cab).
+ */
+const MARKER_MAX_SIZE = 0.3;
 
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
+const _center = new THREE.Vector3();
+const isOriginMarker = (b: THREE.Box3) =>
+  b.getSize(_size).length() < MARKER_MAX_SIZE && b.getCenter(_center).length() < MARKER_MAX_SIZE;
 
-/** Bounds of a part's meaningful meshes, in the truck group's space. */
+/** Bounds of a part's meshes, without the origin marker, in the truck group's space. */
 function partBounds(root: THREE.Object3D) {
   const box = new THREE.Box3();
   root.updateWorldMatrix(true, true);
   root.traverse((o) => {
     if (!(o as THREE.Mesh).isMesh) return;
     _box.makeEmpty().expandByObject(o);
-    if (_box.getSize(_size).length() >= MIN_MESH_SIZE) box.union(_box);
+    if (!isOriginMarker(_box)) box.union(_box);
   });
   return box;
 }
@@ -257,6 +263,12 @@ export function LabelOverlay({
   );
 }
 
+/** Canvas pixels covered by the camera toolbar along the top edge. */
+export function toolbarInset(toolbar: HTMLElement | null, canvas: HTMLCanvasElement) {
+  if (!toolbar) return 0;
+  return Math.max(0, toolbar.getBoundingClientRect().bottom - canvas.getBoundingClientRect().top);
+}
+
 const LABEL_GAP_PX = 8;
 const _top = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
@@ -275,18 +287,23 @@ export function ExplodeLabels({
   plan,
   front,
   overlayRef,
+  toolbarRef,
 }: {
   explosion: Explosion;
   plan: ExplodePart[];
   /** Vehicle facing [x, z]: the chassis label sits over the cab, clear of the body's. */
   front: [number, number];
   overlayRef: RefObject<HTMLDivElement | null>;
+  /** Labels never sit under the camera toolbar. */
+  toolbarRef: RefObject<HTMLElement | null>;
 }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
+  const gl = useThree((s) => s.gl);
   useFrame(() => {
     const root = overlayRef.current;
     if (!root) return;
+    const top = toolbarInset(toolbarRef.current, gl.domElement);
     const show = explosion.fullyExploded;
     const items: { el: HTMLElement; x: number; y: number; dist: number }[] = [];
     for (const p of plan) {
@@ -321,7 +338,7 @@ export function ExplodeLabels({
       const w = it.el.offsetWidth;
       const h = it.el.offsetHeight;
       const r = { x: it.x - w / 2, y: it.y - h - LABEL_GAP_PX, w, h };
-      const inside = r.x >= 0 && r.y >= 0 && r.x + w <= size.width && r.y + h <= size.height;
+      const inside = r.x >= 0 && r.y >= top && r.x + w <= size.width && r.y + h <= size.height;
       if (!inside || placed.some((q) => overlaps(q, r))) {
         it.el.style.display = "none";
         continue;
@@ -341,15 +358,20 @@ const _back = new THREE.Vector3();
 const _corner = new THREE.Vector3();
 
 /**
- * Smallest camera distance from `target`, along the current view direction,
- * at which every exploded part fits the view with a 10% margin.
+ * Smallest camera distance from `target`, along `toCamera` (target to camera;
+ * defaults to the current view), at which every exploded part fits the view
+ * with a 10% margin.
  */
-function fitExplodedRadius(
+export function fitExplodedRadius(
   explosion: Explosion,
   camera: THREE.PerspectiveCamera,
   target: THREE.Vector3,
+  /** Share of the view's upper half left free by the toolbar (1 = all of it). */
+  topFree = 1,
+  toCamera?: THREE.Vector3,
 ) {
-  _back.subVectors(camera.position, target).normalize();
+  if (toCamera) _back.copy(toCamera).normalize();
+  else _back.subVectors(camera.position, target).normalize();
   _right.crossVectors(camera.up, _back).normalize();
   _upv.crossVectors(_back, _right);
   const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
@@ -365,10 +387,11 @@ function fitExplodedRadius(
       _corner.z += p.offset[2];
       _rel.subVectors(_corner, target);
       const along = _rel.dot(_back);
+      const y = _rel.dot(_upv);
       need = Math.max(
         need,
         along + (FIT_MARGIN * Math.abs(_rel.dot(_right))) / tanH,
-        along + (FIT_MARGIN * Math.abs(_rel.dot(_upv))) / tanV,
+        along + (FIT_MARGIN * Math.abs(y)) / (tanV * (y > 0 ? topFree : 1)),
       );
     }
   }
@@ -386,15 +409,28 @@ export function ExplodeCamera({
   exploded,
   reduced,
   onFit,
+  assembledFit,
+  toolbarRef,
 }: {
   explosion: Explosion;
   exploded: boolean;
   reduced: boolean;
   onFit: (radius: number | null) => void;
+  /** The orbit rig's assembled distance for an aspect ratio. */
+  assembledFit: (aspect: number) => number;
+  /** Parts are framed below the camera toolbar. */
+  toolbarRef: RefObject<HTMLElement | null>;
 }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const controls = useThree((s) => s.controls) as OrbitControls | null;
   const invalidate = useThree((s) => s.invalidate);
+  const gl = useThree((s) => s.gl);
+  const size = useThree((s) => s.size);
+  const aspect = size.width / size.height;
+  const fitNow = () => {
+    const topFree = 1 - (2 * toolbarInset(toolbarRef.current, gl.domElement)) / size.height;
+    return fitExplodedRadius(explosion, camera, controls!.target, Math.max(0.2, topFree));
+  };
   const dragging = useRef(false);
   const saved = useRef<number | null>(null);
   const tween = useRef<{ from: number; to: number; t0: number; ms: number; done?: () => void } | null>(null);
@@ -425,7 +461,7 @@ export function ExplodeCamera({
     const ms = reduced ? 0 : explosion.durationMs;
     if (exploded) {
       saved.current ??= current;
-      const to = Math.max(current, fitExplodedRadius(explosion, camera, controls.target));
+      const to = Math.max(current, fitNow());
       onFit(to);
       if (!dragging.current) tween.current = { from: current, to, t0: performance.now(), ms };
     } else {
@@ -439,6 +475,23 @@ export function ExplodeCamera({
     invalidate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exploded, controls]);
+
+  // A resize resets the orbit rig to its assembled distance: refit while separated.
+  const lastAspect = useRef(aspect);
+  useEffect(() => {
+    if (lastAspect.current === aspect) return;
+    lastAspect.current = aspect;
+    if (!controls || !explosion.exploded) return;
+    tween.current = null;
+    saved.current = assembledFit(aspect);
+    const r = Math.max(saved.current, fitNow());
+    onFit(r);
+    _rel.subVectors(camera.position, controls.target).setLength(r);
+    camera.position.copy(controls.target).add(_rel);
+    controls.update();
+    invalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aspect, controls]);
 
   useFrame(() => {
     const tw = tween.current;

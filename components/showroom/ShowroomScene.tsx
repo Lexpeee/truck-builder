@@ -37,6 +37,8 @@ import {
   ExplodeDriver,
   ExplodeLabels,
   LabelOverlay,
+  fitExplodedRadius,
+  toolbarInset,
   ExplodeGroup,
   Explosion,
   easeInOut,
@@ -82,6 +84,8 @@ type Props = {
   partColors?: Record<string, MaterialColors>;
   /** Orbit only: parts separated ("Show parts"). Omitted, the truck stays assembled. */
   exploded?: boolean;
+  /** Shows the "Show parts" toggle in the orbit toolbar. */
+  onExplodedChange?: (exploded: boolean) => void;
   /** Optional GLB URL replacing the catalog build. */
   model?: string;
   theme: HeroTheme;
@@ -453,13 +457,21 @@ function ViewTransition({
   front,
   reduced,
   explodeFit,
+  explosion,
+  toolbarRef,
+  onExplodeFit,
 }: {
   request: { view: View; n: number } | null;
   front: [number, number];
   reduced: boolean;
   /** While exploded, presets keep every part in view. */
   explodeFit: number | null;
+  explosion?: Explosion;
+  toolbarRef: React.RefObject<HTMLElement | null>;
+  onExplodeFit: (radius: number) => void;
 }) {
+  const gl = useThree((s) => s.gl);
+  const height = useThree((s) => s.size.height);
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const aspect = useThree((s) => s.size.width / s.size.height);
@@ -476,6 +488,21 @@ function ViewTransition({
       camera.position.clone().sub(controls.target),
     );
     const to = viewSpherical(request.view, front, Math.max(fitDistance(aspect), explodeFit ?? 0));
+    if (explosion?.exploded) {
+      // Fit the separated parts from the new direction, not the old one.
+      const topFree = 1 - (2 * toolbarInset(toolbarRef.current, gl.domElement)) / height;
+      const r = fitExplodedRadius(
+        explosion,
+        camera as THREE.PerspectiveCamera,
+        controls.target,
+        Math.max(0.2, topFree),
+        new THREE.Vector3().setFromSpherical(to),
+      );
+      if (r > to.radius) {
+        to.radius = r;
+        onExplodeFit(r);
+      }
+    }
     // Go the short way round.
     to.theta = from.theta + Math.atan2(Math.sin(to.theta - from.theta), Math.cos(to.theta - from.theta));
     tween.current = { from, to, t0: performance.now() };
@@ -604,6 +631,7 @@ export default function ShowroomScene({
   upfitIds,
   partColors,
   exploded = false,
+  onExplodedChange,
   model,
   theme,
   lightsTheme = theme,
@@ -630,7 +658,15 @@ export default function ShowroomScene({
   const [settleCount, setSettleCount] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [explodeFit, setExplodeFit] = useState<number | null>(null);
+  /** Screen-reader announcement; empty until the first toggle so nothing is read on load. */
+  const [announcement, setAnnouncement] = useState("");
+  const toggleExploded = () => {
+    const next = !exploded;
+    setAnnouncement(next ? "Parts separated" : "Parts put back together");
+    onExplodedChange?.(next);
+  };
   const firstToggle = useRef(true);
   const [reduced, setReduced] = useState(false);
   // Orbit auto-rotate stops on click and resumes for the next vehicle.
@@ -794,6 +830,9 @@ export default function ShowroomScene({
             front={front}
             reduced={reduced}
             explodeFit={explodeFit}
+            explosion={explodable ? explosion : undefined}
+            toolbarRef={toolbarRef}
+            onExplodeFit={setExplodeFit}
           />
           {explodable && (
             <>
@@ -803,8 +842,16 @@ export default function ShowroomScene({
                 exploded={exploded}
                 reduced={reduced}
                 onFit={setExplodeFit}
+                assembledFit={fitDistance}
+                toolbarRef={toolbarRef}
               />
-              <ExplodeLabels explosion={explosion} plan={plan} front={front} overlayRef={labelsRef} />
+              <ExplodeLabels
+                explosion={explosion}
+                plan={plan}
+                front={front}
+                overlayRef={labelsRef}
+                toolbarRef={toolbarRef}
+              />
             </>
           )}
         </>
@@ -827,6 +874,7 @@ export default function ShowroomScene({
     {explodable && <LabelOverlay plan={plan} overlayRef={labelsRef} />}
     {!turntable && (
       <div
+        ref={toolbarRef}
         role="toolbar"
         aria-label="Camera view"
         className="absolute inset-x-0 top-3 flex flex-wrap justify-center gap-2 px-3"
@@ -841,6 +889,19 @@ export default function ShowroomScene({
             {v.label}
           </button>
         ))}
+        {explodable && onExplodedChange && (
+          <button
+            type="button"
+            aria-pressed={exploded}
+            onClick={toggleExploded}
+            className="min-h-12 rounded-full border bg-background/90 px-4 text-base font-semibold shadow-sm backdrop-blur transition-colors hover:border-primary focus-visible:ring-3 focus-visible:ring-ring/50 outline-none aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+          >
+            {exploded ? "Put back together" : "Show parts"}
+          </button>
+        )}
+        <p aria-live="polite" className="sr-only">
+          {announcement}
+        </p>
       </div>
     )}
     </div>
