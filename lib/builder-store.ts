@@ -11,6 +11,9 @@ type BuilderState = {
   toggleUpfit: (id: string) => void;
   /** Paints the vehicle (its id) or one upfit (its id). */
   setPaint: (targetId: string, color: PaintColorId) => void;
+  /** "Show parts": upfits separated from the chassis. */
+  exploded: boolean;
+  setExploded: (exploded: boolean) => void;
   dismissNotices: () => void;
 };
 
@@ -35,5 +38,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     if (next.vehicle === paint.vehicle && next.upfits[targetId] === paint.upfits[targetId]) return;
     set({ build: { ...build, paint: next } });
   },
+  exploded: false,
+  setExploded: (exploded) => set({ exploded }),
   dismissNotices: () => set({ notices: [] }),
 }));

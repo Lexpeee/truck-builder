@@ -32,6 +32,7 @@ export default function Scene() {
   const vehicleId = useBuilderStore((s) => s.build.vehicleId);
   const upfitIds = useBuilderStore((s) => s.build.upfitIds);
   const build = useBuilderStore((s) => s.build);
+  const exploded = useBuilderStore((s) => s.exploded);
   const [ready, setReady] = useState(false);
   // Catalog id -> its paint material's sRGB hex, e.g. { "ram-696j-body": { "upfit-paint": "#1F5EFF" } }.
   const partColors = useMemo(
@@ -60,6 +61,7 @@ export default function Scene() {
           vehicleId={vehicleId}
           upfitIds={upfitIds}
           partColors={partColors}
+          exploded={exploded}
           interaction="orbit"
           theme="light"
           lightsTheme="dark"

@@ -22,6 +22,7 @@ import {
 } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { EXPLODE_TIMING, explodePlan, type ExplodePart } from "@/lib/explode";
 import { PAINT_MATERIAL } from "@/lib/paint";
 import { getRenderBudget } from "@/lib/render-budget";
 import RenderStats, { statsEnabled } from "../three/RenderStats";
@@ -30,6 +31,7 @@ import {
   FrameRateIndependentDamping,
   RenderGate,
 } from "../three/render-loop";
+import { ExplodeDriver, ExplodeGroup, Explosion, easeInOut } from "./ExplodedParts";
 import {
   CAMERA,
   DISC,
@@ -69,6 +71,8 @@ type Props = {
   upfitIds: string[];
   /** Per catalog id, repaints that part's paint material; parts not listed keep their GLB colors. */
   partColors?: Record<string, MaterialColors>;
+  /** Orbit only: parts separated ("Show parts"). Omitted, the truck stays assembled. */
+  exploded?: boolean;
   /** Optional GLB URL replacing the catalog build. */
   model?: string;
   theme: HeroTheme;
@@ -285,12 +289,17 @@ const Model = ({ url, position, colors }: Part & { colors?: MaterialColors }) =>
 function Truck({
   parts,
   partColors,
+  explosion,
+  plan,
   theme,
   spin,
   still,
 }: {
   parts: Part[];
   partColors?: Record<string, MaterialColors>;
+  /** Present when parts can be separated; `plan` gives each part's offset. */
+  explosion?: Explosion;
+  plan?: ExplodePart[];
   theme: HeroTheme;
   /** Present for the turntable: centers the parts and rotates the group. */
   spin?: Spin;
@@ -322,9 +331,17 @@ function Truck({
   return (
     <group ref={spinner}>
       <group ref={truck}>
-        {parts.map((p) => (
-          <Model key={p.url} {...p} colors={p.id ? partColors?.[p.id] : undefined} />
-        ))}
+        {parts.map((p) => {
+          const model = <Model {...p} colors={p.id ? partColors?.[p.id] : undefined} />;
+          const part = explosion && plan?.find((x) => x.id === p.id);
+          return part ? (
+            <ExplodeGroup key={p.url} explosion={explosion} part={part}>
+              {model}
+            </ExplodeGroup>
+          ) : (
+            <group key={p.url}>{model}</group>
+          );
+        })}
       </group>
       <Ticks theme={theme} />
     </group>
@@ -419,9 +436,6 @@ function viewSpherical(view: View, front: [number, number], radius: number) {
       );
   }
 }
-
-const easeInOut = (k: number) =>
-  k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
 
 /** Eases the orbit camera to the requested preset; jumps under reduced motion. */
 function ViewTransition({
@@ -574,6 +588,7 @@ export default function ShowroomScene({
   vehicleId,
   upfitIds,
   partColors,
+  exploded = false,
   model,
   theme,
   lightsTheme = theme,
@@ -593,6 +608,13 @@ export default function ShowroomScene({
       .map(partFor);
   }, [model, vehicleId, upfitIds]);
   const [spin] = useState(() => new Spin());
+  const explodable = !turntable && !model;
+  const plan = useMemo(() => explodePlan(vehicleId, upfitIds), [vehicleId, upfitIds]);
+  const [explosion] = useState(() => new Explosion());
+  /** Bumped when parts arrive, so baked shadows re-render once per animation. */
+  const [settleCount, setSettleCount] = useState(0);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const firstToggle = useRef(true);
   const [reduced, setReduced] = useState(false);
   // Orbit auto-rotate stops on click and resumes for the next vehicle.
   const [stoppedFor, setStoppedFor] = useState<string | null>(null);
@@ -685,10 +707,30 @@ export default function ShowroomScene({
     };
   }, [inputTarget, turntable, spin, restartAuto]);
 
+  useLayoutEffect(() => explosion.setParts(plan), [explosion, plan]);
+
+  // Separate or reassemble. Reduced motion: no movement, a short cross-fade instead.
+  useEffect(() => {
+    if (!explodable) return;
+    explosion.toggle(exploded, performance.now(), reduced);
+    if (reduced && !firstToggle.current) {
+      wrapperRef.current?.animate([{ opacity: 0.3 }, { opacity: 1 }], {
+        duration: EXPLODE_TIMING.fadeMs,
+        easing: "ease-out",
+      });
+    }
+    firstToggle.current = false;
+    invalidateRef.current();
+    // `reduced` is read at toggle time only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exploded, explodable, explosion]);
+
+  const handleSettled = useCallback(() => setSettleCount((n) => n + 1), []);
+
   const animate = active && !still && !reduced && autoWindow;
 
   return (
-    <div>
+    <div ref={wrapperRef}>
     <Canvas
       frameloop="never"
       // Size changes only: tracking scroll re-measures the canvas on any scroll
@@ -715,7 +757,7 @@ export default function ShowroomScene({
     >
       <AdaptiveDpr />
       <PerformanceMonitor />
-      <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}`} />
+      <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}:${settleCount}`} />
       <RenderGate fps={budget.fps} active={active} />
       {statsEnabled() && <RenderStats />}
       <Lights theme={lightsTheme} />
@@ -731,6 +773,7 @@ export default function ShowroomScene({
           <FrameRateIndependentDamping />
           <AutoRotate enabled={animate && stoppedFor !== vehicleId} />
           <ViewTransition request={viewRequest} front={front} reduced={reduced} />
+          {explodable && <ExplodeDriver explosion={explosion} onSettled={handleSettled} />}
         </>
       )}
       <Suspense fallback={null}>
@@ -739,6 +782,8 @@ export default function ShowroomScene({
         <Truck
           parts={parts}
           partColors={partColors}
+          explosion={explodable ? explosion : undefined}
+          plan={plan}
           theme={theme}
           spin={turntable ? spin : undefined}
           still={still}
