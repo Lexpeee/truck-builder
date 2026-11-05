@@ -54,9 +54,6 @@ export default function Scene() {
       </Helmet>
       <div 
         className="absolute inset-0 z-0"
-        style={{
-          background: `url(/images/showroom-bg.png) center/cover no-repeat`,
-        }}
       >
         <ShowroomScene
           vehicleId={vehicleId}
