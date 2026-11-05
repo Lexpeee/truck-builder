@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node /private/tmp/claude-501/-Users-johnalexispineda-Documents-repos-truck-builder-test/4c67a612-84dc-4999-8378-0c5b52e13523/scratchpad/inspect-glb.mjs public/models/*.glb)",
+      "Bash(npm install *)",
+      "Bash(node -e \"import\\('./lib/catalog.ts'\\).then\\(m=>console.log\\(m.VEHICLES.length, m.UPFITS.length\\)\\)\")",
+      "mcp__caveman__caveman_retrieve",
+      "Bash(node --no-warnings -e \"import\\('./lib/catalog.ts'\\).then\\(m=>console.log\\(m.VEHICLES.length, m.UPFITS.length\\)\\)\")",
+      "Bash(node --no-warnings scripts/optimize-models.mjs --check)",
+      "Bash(node --no-warnings scripts/optimize-models.mjs)",
+      "Bash(git ls-tree *)",
+      "Bash(awk '{s+=$4} END {print s/1024 \" KB before\"}')",
+      "Bash(grep -v \"^$\")",
+      "Bash(node --no-warnings /private/tmp/claude-501/-Users-johnalexispineda-Documents-repos-truck-builder-test/4c67a612-84dc-4999-8378-0c5b52e13523/scratchpad/inspect-glb.mjs \"public/models/RAM 2500HD CC 696j Body.glb\")",
+      "Bash(node -p \"require\\('./node_modules/meshoptimizer/package.json'\\).version\")",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(perl -pi -e ' *)",
+      "Bash(perl -pi -e 's/\\\\btext-xs\\\\b/text-base/g; s/\\\\btext-sm\\\\b/text-base/g' components/builder/SubmitBuildDialog.tsx)",
+      "Bash(perl -pi -e 's/Drag to rotate · Pinch to zoom/Pick a view above, or drag to rotate/' app/builder/ClientPage.tsx)",
+      "Bash(perl -pi -e 's/className=\"h-10 px-5\"/className=\"h-12 px-5 text-base\"/g' components/builder/SubmitBuildDialog.tsx)",
+      "Bash(ls ~/Library/Caches/ms-playwright 2>/dev/null; ls /Users/johnalexispineda/Documents/repos/truck-builder-test/node_modules | grep -i -E \"^playwright|puppeteer\"; which chromium google-chrome 2>/dev/null; ls \"/Applications/Google Chrome.app\" 2>/dev/null | head -1)",
+      "Read(//Users/johnalexispineda/Library/Caches/ms-playwright/**)",
+      "Read(//Applications/Google Chrome.app/**)",
+      "Bash(perl -pi -e 's/if \\\\\\(b.min.y < lo\\\\\\)/if \\(b.min.y < -0.05\\) console.log\\(\"  low:\", n.getName\\(\\)||\"-\", inst?\"inst\":\"\", \"mat\", mesh.listPrimitives\\(\\)[0].getMaterial\\(\\)?.getName\\(\\), \"tris\", mesh.listPrimitives\\(\\).reduce\\(\\(s,p\\)=>s+\\(p.getIndices\\(\\)??p.getAttribute\\(\"POSITION\"\\)\\).getCount\\(\\)\\\\/3,0\\), \"min\", b.min.toArray\\(\\).map\\(v=>v.toFixed\\(2\\)\\).join\\(\",\"\\), \"max\", b.max.toArray\\(\\).map\\(v=>v.toFixed\\(2\\)\\).join\\(\",\"\\)\\);\\\\n    if \\(b.min.y < lo\\)/' scripts/.tmp-ib.mjs)",
+      "Bash(node --no-warnings scripts/.tmp-ib.mjs \"public/models/RAM 2500HD CC.glb\")"
+    ]
+  }
+}

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "models:optimize": "node --no-warnings scripts/optimize-models.mjs",
+    "models:check": "node --no-warnings scripts/optimize-models.mjs --check"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -27,6 +29,9 @@
     "zustand": "^5.0.16"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -34,6 +39,7 @@
     "@types/three": "^0.185.4",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "meshoptimizer": "^1.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

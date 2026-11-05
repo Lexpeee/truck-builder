@@ -196,3 +196,7 @@ Decision pending: dark (premium, stands apart) vs light (matches the rest of the
 - [ ] Produce poster WebPs per theme from the final model
 - [ ] Confirm chip copy matches the configuration shown
 - [ ] Wire analytics: hero view, drag interaction, CTA clicks
+
+## 10. Other files to read and help 
+
+Refer to the files under the `docs` folder for more guidelines. 

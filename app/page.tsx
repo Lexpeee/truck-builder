@@ -1,20 +1,13 @@
-import Image from "next/image";
-import Link from "next/link";
+import ShowroomHero from "@/components/hero/ShowroomHero";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
-  ArrowRight,
   Banknote,
-  Check,
-  ChevronDown,
   ShieldCheck,
   Truck,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import ShowroomHero from "@/components/hero/ShowroomHero";
-import { buttonVariants } from "@/components/ui/button";
-import { VEHICLES } from "@/lib/catalog";
-import { cn } from "@/lib/utils";
-import expressVan from "@/public/images/van-chevy-express.webp";
 
 const pill = (variant: "default" | "secondary" | "outline" = "default") =>
   cn(

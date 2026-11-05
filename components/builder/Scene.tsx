@@ -13,7 +13,7 @@ const LoadingOverlay = () => {
   return (
     <div
       role="status"
-      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
+      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-lg text-muted-foreground"
     >
       <div className="w-48 rounded-full bg-background/80 p-1 shadow-sm backdrop-blur">
         <div
@@ -21,7 +21,7 @@ const LoadingOverlay = () => {
           style={{ width: `${Math.max(5, pct)}%` }}
         />
       </div>
-      {active ? `Loading 3D model… ${pct}%` : "Preparing 3D model…"}
+      {active ? `Loading your truck… ${pct}%` : "Getting your truck ready…"}
     </div>
   );
 };

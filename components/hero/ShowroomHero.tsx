@@ -46,7 +46,7 @@ export default function ShowroomHero({
   model?: string;
 }) {
   return (
-    <section className="sh-hero !h-screen" data-theme={theme}>
+  <section className="sh-hero !h-screen" data-theme={theme}>
       <FloorGrid />
 
       <header className="sh-header">
@@ -71,14 +71,7 @@ export default function ShowroomHero({
       </div>
 
       <HeroStage theme={theme} model={model} label={STAGE_LABEL}>
-        <Image
-          src={`/hero/showroom-${theme}.webp`}
-          alt=""
-          fill
-          preload
-          sizes="(min-width: 1280px) 1000px, 100vw"
-          className="sh-poster"
-        />
+        <></>
       </HeroStage>
 
       <p className="sh-hint">Drag to spin · real 3D</p>

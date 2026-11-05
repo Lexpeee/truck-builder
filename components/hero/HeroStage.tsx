@@ -23,10 +23,16 @@ const subscribeMobile = (cb: () => void) => {
 };
 
 /** WebGL or model failure: render nothing and let the poster stay. */
-class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class SceneBoundary extends Component<
+  { children: ReactNode; onError: () => void },
+  { failed: boolean }
+> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onError();
   }
   render() {
     return this.state.failed ? null : this.props.children;
@@ -48,6 +54,7 @@ export default function HeroStage({
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const [mounted, setMounted] = useState(false);
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(true);
   const [tabShown, setTabShown] = useState(true);
   const mobile = useSyncExternalStore(
@@ -90,9 +97,15 @@ export default function HeroStage({
       aria-label={label}
       tabIndex={0}
     >
-      {children}
+      {/* {children} */}
+      {/* Never a blank stage while loading (3D-MODELING-GUIDELINES §5). */}
+      {!ready && !failed && (
+        <p className="sh-loading" aria-hidden>
+          Loading your truck…
+        </p>
+      )}
       {mounted && (
-        <SceneBoundary>
+        <SceneBoundary onError={() => setFailed(true)}>
           <ShowroomScene
             {...HERO_BUILD}
             interaction="turntable"

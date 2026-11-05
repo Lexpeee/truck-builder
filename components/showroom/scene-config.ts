@@ -42,6 +42,10 @@ export const MOTION = {
   initialRotation: -0.35,
   autoRotate: 0.28, // rad/s
   resumeAfterMs: 1500,
+  /** Auto-rotate stops on its own this long after load or the last interaction (3D-MODELING-GUIDELINES §4). */
+  stopAfterMs: 10_000,
+  /** Camera preset transitions (3D-MODELING-GUIDELINES §5: ≤ 0.8 s). */
+  viewTransitionMs: 600,
   dragSensitivity: 0.008, // rad per px
   keyStep: 0.15, // rad per press
 };

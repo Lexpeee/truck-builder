@@ -4,6 +4,11 @@ export type Vehicle = {
   id: string;
   name: string;
   fileName: string;
+  /**
+   * Direction the cab faces in model space, as [x, z]. Camera presets aim from
+   * it. The modelling spec wants +X forward ([1, 0]); RAM files predate it.
+   */
+  front: [number, number];
   /** Upfits selected when this vehicle is first chosen. */
   defaultUpfitIds: string[];
 };
@@ -40,12 +45,14 @@ export const VEHICLES: Vehicle[] = [
     id: "ram-2500hd-cc",
     name: "RAM 2500HD CC",
     fileName: "RAM 2500HD CC.glb",
+    front: [0, -1],
     defaultUpfitIds: ["ram-696j-body"],
   },
   {
     id: "chevy-express-3500",
     name: "Chevrolet Express 3500",
     fileName: "Chevrolet express 3500.glb",
+    front: [1, 0],
     defaultUpfitIds: [],
   },
 ];

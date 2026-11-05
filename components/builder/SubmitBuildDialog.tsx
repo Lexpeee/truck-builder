@@ -76,7 +76,7 @@ function TextField({
 }: FieldSpec) {
   return (
     <label className={wide ? "sm:col-span-2" : undefined}>
-      <span className="mb-1.5 block text-sm font-medium">
+      <span className="mb-1.5 block text-base font-medium">
         {label}
         {optional && (
           <span className="font-normal text-muted-foreground"> (optional)</span>
@@ -87,6 +87,7 @@ function TextField({
         type={type}
         autoComplete={autoComplete}
         required={!optional}
+        className="h-12 text-base"
       />
     </label>
   );
@@ -95,12 +96,12 @@ function TextField({
 function BuildSummary({ build }: { build: Build }) {
   return (
     <section className="rounded-xl border bg-card p-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <h3 className="text-base font-semibold uppercase tracking-wider text-muted-foreground">
         Your build
       </h3>
       <p className="mt-2 font-bold">{getVehicle(build.vehicleId)?.name}</p>
       {build.upfitIds.length ? (
-        <ul className="mt-2 divide-y text-sm">
+        <ul className="mt-2 divide-y text-base">
           {build.upfitIds.map((id) => {
             const upfit = getUpfit(id);
             return (
@@ -114,7 +115,7 @@ function BuildSummary({ build }: { build: Build }) {
           })}
         </ul>
       ) : (
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-base text-muted-foreground">
           Stock vehicle, no upfits.
         </p>
       )}
@@ -164,7 +165,7 @@ function SubmitBuildForm({
       <BuildSummary build={build} />
 
       <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <legend className="mb-3 text-base font-semibold uppercase tracking-wider text-muted-foreground">
           Your details
         </legend>
         {CONTACT_FIELDS.map((f) => (
@@ -173,7 +174,7 @@ function SubmitBuildForm({
       </fieldset>
 
       <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <legend className="mb-3 text-base font-semibold uppercase tracking-wider text-muted-foreground">
           Delivery address
         </legend>
         {ADDRESS_FIELDS.map((f) => (
@@ -197,14 +198,14 @@ function SubmitBuildForm({
         <Button
           type="button"
           variant="outline"
-          className="h-10 px-5"
+          className="h-12 px-5 text-base"
           onClick={onClose}
         >
           Cancel
         </Button>
         <Button
           type="submit"
-          className="h-10 px-5"
+          className="h-12 px-5 text-base"
           disabled={submitting}
         >
           {submitting ? "Submitting…" : "Submit build"}

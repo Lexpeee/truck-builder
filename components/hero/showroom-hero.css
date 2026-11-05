@@ -84,12 +84,12 @@
 .sh-header nav {
   display: none;
   gap: 28px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
 }
 .sh-header nav a {
   color: var(--hero-muted);
-  min-height: 44px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
 }
@@ -107,7 +107,7 @@
 }
 .sh-eyebrow {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: var(--hero-eyebrow-weight);
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -123,7 +123,7 @@
 .sh-sub {
   margin: 0;
   max-width: 900px;
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.5;
   color: var(--hero-muted);
 }
@@ -159,9 +159,20 @@
   opacity: 0;
 }
 
+.sh-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: 18px;
+  color: var(--hero-muted);
+}
+
+/* Type sizes: 3D-MODELING-GUIDELINES §5 (body ≥ 18px, labels ≥ 16px). */
 .sh-hint {
   margin: 0;
-  font-size: 13px;
+  font-size: 16px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--hero-subtle);
@@ -186,7 +197,7 @@
   gap: 10px;
   padding: 12px 16px;
   border-radius: 14px;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--hero-subtle);
   background: var(--chip-bg);
   border: 1px solid var(--chip-border);

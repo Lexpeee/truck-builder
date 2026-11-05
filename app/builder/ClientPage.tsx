@@ -23,7 +23,7 @@ export default function TruckBuilder() {
           <span className="hidden sm:inline">New Work Trucks</span>
         </Link>
         <span aria-hidden className="h-5 w-px bg-border" />
-        <h1 className="truncate text-sm font-semibold sm:text-base">
+        <h1 className="truncate text-base font-semibold sm:text-lg">
           {getVehicle(vehicleId)?.name}
         </h1>
       </header>
@@ -31,8 +31,8 @@ export default function TruckBuilder() {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="relative min-h-0 flex-1 bg-gradient-to-b from-primary/10 to-background">
           <Scene />
-          <p className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-background/80 px-3 py-1 text-xs text-muted-foreground whitespace-nowrap backdrop-blur">
-            <Rotate3d className="size-3.5" /> Drag to rotate · Pinch to zoom
+          <p className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-background/80 px-3 py-1.5 text-base text-muted-foreground whitespace-nowrap backdrop-blur">
+            <Rotate3d className="size-4" /> Pick a view above, or drag to rotate
           </p>
         </div>
 

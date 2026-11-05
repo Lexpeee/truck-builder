@@ -80,10 +80,15 @@ type Props = {
 class Spin {
   angle = MOTION.initialRotation;
   private reduced = false;
+  /** -Infinity holds still until start(). */
   private lastInput = -Infinity;
 
   setReducedMotion(v: boolean) {
     this.reduced = v;
+  }
+  /** Auto-rotate now (the model just appeared), with no post-input pause. */
+  start() {
+    this.lastInput = performance.now() - MOTION.resumeAfterMs;
   }
   nudge(radians: number) {
     this.angle += radians;
@@ -93,10 +98,26 @@ class Spin {
     this.lastInput = performance.now();
   }
   step(delta: number) {
-    const idle = performance.now() - this.lastInput > MOTION.resumeAfterMs;
-    if (!this.reduced && idle)
+    const since = performance.now() - this.lastInput;
+    if (!this.reduced && since > MOTION.resumeAfterMs && since < MOTION.stopAfterMs)
       this.angle += MOTION.autoRotate * Math.min(delta, 0.1);
   }
+}
+
+/**
+ * True until `ms` after the last restart() while `armed`, so the auto-rotate
+ * frame loop stops with the rotation instead of rendering still frames.
+ */
+function useAutoRotateWindow(armed: boolean, ms: number) {
+  const [run, setRun] = useState(0);
+  const [expired, setExpired] = useState(-1);
+  useEffect(() => {
+    if (!armed) return;
+    const id = setTimeout(() => setExpired(run), ms);
+    return () => clearTimeout(id);
+  }, [armed, run, ms]);
+  const restart = useCallback(() => setRun((r) => r + 1), []);
+  return [expired !== run, restart] as const;
 }
 
 function CameraRig({ mobile }: { mobile: boolean }) {
@@ -240,7 +261,9 @@ function Truck({
     if (!spin) return;
     const g = truck.current!;
     g.position.set(0, 0, 0);
-    const box = new THREE.Box3().setFromObject(g);
+    // Precise: the corners of a rotated part's local box hang far below its
+    // vertices, which would lift the truck off the disc.
+    const box = new THREE.Box3().setFromObject(g, true);
     const center = box.getCenter(new THREE.Vector3());
     g.position.set(-center.x, DISC.height - box.min.y, -center.z);
   }, [spin, key]);
@@ -285,18 +308,127 @@ function ReadySignal({ onReady }: { onReady: (ready: boolean) => void }) {
 const ORBIT_CAMERA: [number, number, number] = [10, 5, 5];
 /** Narrowest aspect ratio at which the whole truck fits at the base distance. */
 const FIT_ASPECT = 1.5;
+/** Zoom range around the fitted distance: never inside the truck, never losing it. */
+const ZOOM = { in: 0.6, out: 1.6 };
 
 /**
  * The camera's field of view is vertical, so a tall, narrow viewport (a phone
- * in portrait) crops the truck's length. Pull the camera back to compensate.
+ * in portrait) crops the truck's length. This pulls the camera back to compensate.
  */
-function FitToViewport() {
+const fitDistance = (aspect: number) =>
+  Math.hypot(...ORBIT_CAMERA) * Math.max(1, FIT_ASPECT / aspect);
+
+/** OrbitControls fitted to the viewport, with zoom limited around that distance. */
+function OrbitRig() {
   const camera = useThree((s) => s.camera);
   const aspect = useThree((s) => s.size.width / s.size.height);
+  const fit = fitDistance(aspect);
   useEffect(() => {
-    const base = Math.hypot(...ORBIT_CAMERA);
-    camera.position.setLength(base * Math.max(1, FIT_ASPECT / aspect));
-  }, [camera, aspect]);
+    camera.position.setLength(fit);
+  }, [camera, fit]);
+  return (
+    <OrbitControls
+      makeDefault
+      enableDamping
+      enableZoom
+      minDistance={fit * ZOOM.in}
+      maxDistance={fit * ZOOM.out}
+      enablePan={false}
+      minPolarAngle={POLAR.min}
+      maxPolarAngle={POLAR.max}
+    />
+  );
+}
+
+type View = "front34" | "side" | "rear" | "top" | "reset";
+
+/** Preset buttons, always visible in the orbit view (3D-MODELING-GUIDELINES §5). */
+const VIEWS: { id: View; label: string }[] = [
+  { id: "front34", label: "Front 3/4" },
+  { id: "side", label: "Side" },
+  { id: "rear", label: "Rear" },
+  { id: "top", label: "Top" },
+  { id: "reset", label: "Reset view" },
+];
+
+/** Polar limits; the top preset sits just inside the upper one. */
+const POLAR = { min: 0.05, max: Math.PI / 2.5 };
+
+/** Camera direction for a preset. Side is the driver's (left) side. */
+function viewSpherical(view: View, front: [number, number], radius: number) {
+  const ahead = Math.atan2(front[0], front[1]);
+  const at = (polar: number, azimuth: number) =>
+    new THREE.Spherical(radius, polar, azimuth);
+  switch (view) {
+    case "front34":
+      return at(1.05, ahead + Math.PI / 4);
+    case "side":
+      return at(1.2, ahead + Math.PI / 2);
+    case "rear":
+      return at(1.2, ahead + Math.PI);
+    case "top":
+      return at(POLAR.min, ahead + Math.PI / 2);
+    case "reset":
+      return new THREE.Spherical().setFromVector3(
+        new THREE.Vector3(...ORBIT_CAMERA).setLength(radius),
+      );
+  }
+}
+
+const easeInOut = (k: number) =>
+  k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+
+/** Eases the orbit camera to the requested preset; jumps under reduced motion. */
+function ViewTransition({
+  request,
+  front,
+  reduced,
+}: {
+  request: { view: View; n: number } | null;
+  front: [number, number];
+  reduced: boolean;
+}) {
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
+  const aspect = useThree((s) => s.size.width / s.size.height);
+  const invalidate = useThree((s) => s.invalidate);
+  const handled = useRef(0);
+  const tween = useRef<{ from: THREE.Spherical; to: THREE.Spherical; t0: number } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!request || !controls || handled.current === request.n) return;
+    handled.current = request.n;
+    const from = new THREE.Spherical().setFromVector3(
+      camera.position.clone().sub(controls.target),
+    );
+    const to = viewSpherical(request.view, front, fitDistance(aspect));
+    // Go the short way round.
+    to.theta = from.theta + Math.atan2(Math.sin(to.theta - from.theta), Math.cos(to.theta - from.theta));
+    tween.current = { from, to, t0: performance.now() };
+    invalidate();
+  }, [request, controls, camera, front, aspect, invalidate]);
+
+  useFrame(() => {
+    const tw = tween.current;
+    if (!tw || !controls) return;
+    const k = reduced ? 1 : Math.min(1, (performance.now() - tw.t0) / MOTION.viewTransitionMs);
+    const e = easeInOut(k);
+    const lerp = (a: number, b: number) => a + (b - a) * e;
+    camera.position
+      .setFromSpherical(
+        new THREE.Spherical(
+          lerp(tw.from.radius, tw.to.radius),
+          lerp(tw.from.phi, tw.to.phi),
+          lerp(tw.from.theta, tw.to.theta),
+        ),
+      )
+      .add(controls.target);
+    controls.update();
+    if (k < 1) invalidate();
+    else tween.current = null;
+  }, -1);
   return null;
 }
 
@@ -319,12 +451,23 @@ function AutoRotate({ enabled }: { enabled: boolean }) {
   );
 }
 
-/** Studio reflections and fill for the orbit view. */
-function StudioEnvironment() {
+/** Extra fill for the orbit view, which has no theme exposure. */
+function OrbitFill() {
   return (
     <>
       <ambientLight intensity={1} />
       <directionalLight position={[10, 10, 5]} intensity={1} />
+    </>
+  );
+}
+
+/**
+ * Studio reflections for both views (3D-MODELING-GUIDELINES §4): overhead and
+ * side strips, rendered once, never shown as background.
+ */
+function StudioEnvironment() {
+  return (
+    <>
       <Environment resolution={256} frames={1}>
         {/* overhead softbox: long highlight along the roof and service body */}
         <Lightformer
@@ -389,6 +532,27 @@ export default function ShowroomScene({
   const [stoppedFor, setStoppedFor] = useState<string | null>(null);
   const [budget] = useState(getRenderBudget);
   const invalidateRef = useRef<() => void>(() => {});
+  const [loaded, setLoaded] = useState(false);
+  const [autoWindow, restartAuto] = useAutoRotateWindow(loaded, MOTION.stopAfterMs);
+  const [viewRequest, setViewRequest] = useState<{ view: View; n: number } | null>(null);
+  const front = getVehicle(vehicleId)?.front ?? [1, 0];
+
+  const handleReady = useCallback(
+    (r: boolean) => {
+      setLoaded(r);
+      if (r) {
+        spin.start();
+        restartAuto();
+      }
+      onReady(r);
+    },
+    [spin, restartAuto, onReady],
+  );
+
+  const selectView = (view: View) => {
+    setStoppedFor(vehicleId);
+    setViewRequest((prev) => ({ view, n: (prev?.n ?? 0) + 1 }));
+  };
 
   // Free the GLB cache with the scene.
   const urlsRef = useRef<string[]>([]);
@@ -419,6 +583,7 @@ export default function ShowroomScene({
       lastX = e.clientX;
       el.setPointerCapture(e.pointerId);
       spin.hold();
+      restartAuto();
     };
     const move = (e: PointerEvent) => {
       if (!dragging) return;
@@ -431,11 +596,13 @@ export default function ShowroomScene({
       dragging = false;
       el.releasePointerCapture(e.pointerId);
       spin.hold();
+      restartAuto();
     };
     const key = (e: KeyboardEvent) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       e.preventDefault();
       spin.nudge((e.key === "ArrowRight" ? 1 : -1) * MOTION.keyStep);
+      restartAuto();
       invalidateRef.current();
     };
     el.addEventListener("pointerdown", down);
@@ -450,11 +617,12 @@ export default function ShowroomScene({
       el.removeEventListener("pointercancel", up);
       el.removeEventListener("keydown", key);
     };
-  }, [inputTarget, turntable, spin]);
+  }, [inputTarget, turntable, spin, restartAuto]);
 
-  const animate = active && !still && !reduced;
+  const animate = active && !still && !reduced && autoWindow;
 
   return (
+    <>
     <Canvas
       frameloop="never"
       shadows="soft"
@@ -487,31 +655,42 @@ export default function ShowroomScene({
         </>
       ) : (
         <>
-          <FitToViewport />
+          <OrbitRig />
           <FrameRateIndependentDamping />
           <AutoRotate enabled={animate && stoppedFor !== vehicleId} />
-          <OrbitControls
-            makeDefault
-            enableDamping
-            enableZoom
-            minZoom={1}
-            maxZoom={1}
-            enablePan={false}
-            minPolarAngle={Math.PI / 4}
-            maxPolarAngle={Math.PI / 2.5}
-          />
+          <ViewTransition request={viewRequest} front={front} reduced={reduced} />
         </>
       )}
       <Suspense fallback={null}>
-        {!turntable && <StudioEnvironment />}
+        <StudioEnvironment />
+        {!turntable && <OrbitFill />}
         <Truck
           parts={parts}
           theme={theme}
           spin={turntable ? spin : undefined}
           still={still}
         />
-        <ReadySignal onReady={onReady} />
+        <ReadySignal onReady={handleReady} />
       </Suspense>
     </Canvas>
+    {!turntable && (
+      <div
+        role="toolbar"
+        aria-label="Camera view"
+        className="absolute inset-x-0 top-3 flex flex-wrap justify-center gap-2 px-3"
+      >
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => selectView(v.id)}
+            className="min-h-12 rounded-full border bg-background/90 px-4 text-base font-semibold shadow-sm backdrop-blur transition-colors hover:border-primary focus-visible:ring-3 focus-visible:ring-ring/50 outline-none"
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+    )}
+    </>
   );
 }

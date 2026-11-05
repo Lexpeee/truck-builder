@@ -50,8 +50,8 @@ const upfitHint = (build: Build, upfit: Upfit, isOn: boolean) => {
 function OptionLabel({ name, hint }: { name: string; hint?: string }) {
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="font-medium">{name}</span>
-      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      <span className="text-lg font-medium">{name}</span>
+      {hint && <span className="text-base text-muted-foreground">{hint}</span>}
     </span>
   );
 }
@@ -69,14 +69,14 @@ function Field({
 }) {
   return (
     <section>
-      <h2 className="mb-2 flex items-baseline justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <h2 className="mb-2 flex items-baseline justify-between text-base font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
         {aside && <span className="font-normal normal-case">{aside}</span>}
       </h2>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2 text-left text-sm font-semibold transition-colors outline-none hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:border-primary">
+        <DropdownMenuTrigger className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2 text-left text-lg font-semibold transition-colors outline-none hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:border-primary">
           <span className="truncate">{value}</span>
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          <ChevronDown className="size-5 shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent className="min-w-(--anchor-width) rounded-xl p-1.5">
           {children}
@@ -86,7 +86,7 @@ function Field({
   );
 }
 
-const itemClassName = "rounded-lg py-2";
+const itemClassName = "min-h-12 rounded-lg py-2";
 
 /** How long the "quote sent" confirmation stays visible. */
 const QUOTE_SENT_MS = 8000;
@@ -131,7 +131,7 @@ export default function BuilderPanel() {
         </Field>
 
         {notices.length > 0 && (
-          <Alert role="status" className="border-primary/30 bg-primary/5 pr-10">
+          <Alert role="status" className="border-primary/30 bg-primary/5 pr-14 text-base">
             <Info className="text-primary" />
             <AlertDescription>
               <ul className="space-y-0.5">
@@ -143,9 +143,9 @@ export default function BuilderPanel() {
             <button
               onClick={onDismissNotices}
               aria-label="Dismiss"
-              className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="absolute top-0 right-0 flex size-12 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <X className="size-4" />
+              <X className="size-5" />
             </button>
           </Alert>
         )}
@@ -219,7 +219,7 @@ export default function BuilderPanel() {
 
       <section className="sticky bottom-0 mt-auto border-t bg-background/95 p-5 backdrop-blur">
         {quoteSent && (
-          <Alert role="status" className="mb-4 border-primary/30 bg-primary/5 pr-10">
+          <Alert role="status" className="mb-4 border-primary/30 bg-primary/5 pr-14 text-base">
             <CircleCheck className="text-primary" />
             <AlertDescription>
               Quote request sent. Our team will be in touch.
@@ -227,27 +227,27 @@ export default function BuilderPanel() {
             <button
               onClick={() => setQuoteSent(false)}
               aria-label="Dismiss"
-              className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="absolute top-0 right-0 flex size-12 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <X className="size-4" />
+              <X className="size-5" />
             </button>
           </Alert>
         )}
         <div className="flex flex-row gap-2 justify-between items-center">
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-base font-semibold uppercase tracking-wider text-muted-foreground">
               Your build
             </h2>
-            <p className="mt-1 font-bold">
+            <p className="mt-1 text-lg font-bold">
               {getVehicle(build.vehicleId)?.name}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               {build.upfitIds.length
                 ? nameList(build.upfitIds)
                 : "Stock vehicle, no upfits."}
             </p>
           </div>
-          <Button onClick={() => setSubmitOpen(true)}>Submit New Build</Button>
+          <Button onClick={() => setSubmitOpen(true)} className="h-12 px-5 text-base">Submit New Build</Button>
         </div>
         <SubmitBuildDialog
           open={submitOpen}
