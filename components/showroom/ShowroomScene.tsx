@@ -643,7 +643,9 @@ function OrbitFill() {
 const StudioEnvironment = memo(function StudioEnvironment() {
   return (
     <>
-      <Environment resolution={256} frames={1}>
+      <Environment resolution={256} frames={1} 
+      files="/hdri/main.hdr" background={false}
+      >
         {/* dim grey room: where no strip is, mirrors and clearcoat reflect this, not black */}
         <color attach="background" args={["#5a6270"]} />
         {/* overhead softbox: long highlight along the roof and service body */}
