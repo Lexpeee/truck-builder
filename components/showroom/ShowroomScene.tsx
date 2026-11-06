@@ -12,6 +12,7 @@ import {
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Suspense,
+  forwardRef,
   memo,
   useCallback,
   useEffect,
@@ -24,6 +25,7 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { EXPLODE_TIMING, explodePlan, type ExplodePart } from "@/lib/explode";
 import { PAINT_MATERIAL } from "@/lib/paint";
+import { ScrollDirector, type ScrollStory } from "./ScrollDirector";
 import { getRenderBudget } from "@/lib/render-budget";
 import RenderStats, { statsEnabled } from "../three/RenderStats";
 import {
@@ -110,6 +112,11 @@ type Props = {
   inputTarget?: HTMLElement | null;
   /** Poster rendering: hold the initial rotation. */
   still?: boolean;
+  /**
+   * Turntable only: page scroll drives the camera, the turntable angle and the
+   * parts (see ScrollDirector), in place of auto-rotate and drag.
+   */
+  story?: ScrollStory;
   /** True after the first frame with every model shown; false while loading. */
   onReady: (ready: boolean) => void;
 };
@@ -127,6 +134,10 @@ class Spin {
   /** Auto-rotate now (the model just appeared), with no post-input pause. */
   start() {
     this.lastInput = performance.now() - MOTION.resumeAfterMs;
+  }
+  /** Held by something else (scroll story) that sets the angle every frame. */
+  setAngle(radians: number) {
+    this.angle = radians;
   }
   nudge(radians: number) {
     this.angle += radians;
@@ -323,6 +334,38 @@ const setVisible = (objects: THREE.Object3D[], visible: boolean) => {
   for (const o of objects) o.visible = visible;
 };
 
+/** Soft dark ellipse: black in the middle, fading to nothing at the rim. */
+const footprintTexture = () => {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(0,0,0,0.85)");
+  g.addColorStop(0.55, "rgba(0,0,0,0.55)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+};
+
+/**
+ * The turntable's shadow. A shadow baked once would stay put while the truck
+ * spins, so this one is a part of the spinning group: same ground footprint
+ * at every angle, as the truck is a rigid shape. Sized by Truck once the parts
+ * are measured.
+ */
+const FootprintShadow = forwardRef<THREE.Mesh>(function FootprintShadow(_, ref) {
+  const map = useMemo(() => footprintTexture(), []);
+  useEffect(() => () => map.dispose(), [map]);
+  return (
+    <mesh ref={ref} rotation-x={-Math.PI / 2} position-y={0.01} renderOrder={-1}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial map={map} transparent depthWrite={false} />
+    </mesh>
+  );
+});
+
 /** Sits the parts on the disc with the ticks; the turntable also spins them. */
 function Truck({
   vehicleId,
@@ -352,6 +395,7 @@ function Truck({
 }) {
   const spinner = useRef<THREE.Group>(null);
   const truck = useRef<THREE.Group>(null);
+  const footprint = useRef<THREE.Mesh>(null);
   const key = parts.map((p) => p.url).join("|");
 
   // Upfits that just left the build stay mounted until they have slid out.
@@ -383,10 +427,20 @@ function Truck({
     const g = truck.current!;
     g.position.set(0, 0, 0);
     // Precise: the corners of a rotated part's local box hang far below its
-    // vertices, which would lift the truck off the disc.
-    const box = new THREE.Box3().setFromObject(g, true);
+    // vertices, which would lift the truck off the disc. Center lines are Line2
+    // meshes whose quad geometry spans ±1 m: they are not part of the truck.
+    const box = new THREE.Box3();
+    const part = new THREE.Box3();
+    g.updateWorldMatrix(true, true);
+    g.traverse((o) => {
+      const mesh = o as THREE.Mesh & { isLine2?: boolean };
+      if (mesh.isMesh && !mesh.isLine2) box.union(part.makeEmpty().expandByObject(mesh, true));
+    });
     const center = box.getCenter(new THREE.Vector3());
     g.position.set(-center.x, DISC.height - box.min.y, -center.z);
+    // The shadow spans the truck, a little wider than its footprint.
+    const size = box.getSize(new THREE.Vector3());
+    footprint.current?.scale.set(size.x * 1.25, size.z * 1.12, 1);
   }, [spin, key]);
 
   useFrame((_, delta) => {
@@ -397,6 +451,7 @@ function Truck({
 
   return (
     <group ref={spinner}>
+      {spin && <FootprintShadow ref={footprint} />}
       <group ref={truck}>
         {shown.map(({ p, ex, leaving }) => {
           const model = <Model {...p} colors={p.id ? partColors?.[p.id] : undefined} />;
@@ -706,6 +761,7 @@ export default function ShowroomScene({
   active = true,
   inputTarget = null,
   still = false,
+  story,
   onReady,
 }: Props) {
   const turntable = interaction === "turntable";
@@ -717,7 +773,7 @@ export default function ShowroomScene({
       .map(partFor);
   }, [model, vehicleId, upfitIds]);
   const [spin] = useState(() => new Spin());
-  const explodable = !turntable && !model;
+  const explodable = !model && (!turntable || !!story);
   const plan = useMemo(() => explodePlan(vehicleId, upfitIds), [vehicleId, upfitIds]);
   const [explosion] = useState(() => new Explosion());
   const [presence] = useState(() => new Presence());
@@ -773,11 +829,11 @@ export default function ShowroomScene({
   // picking one is instant: a part that isn't cached suspends the whole scene.
   const preloadedRef = useRef<string[]>([]);
   useEffect(() => {
-    if (!loaded || !explodable) return;
+    if (!loaded || !explodable || story) return;
     const urls = upfitsForVehicle(vehicleId).map((u) => partFor(u).url);
     urls.forEach((url) => useGLTF.preload(url));
     preloadedRef.current = urls;
-  }, [loaded, explodable, vehicleId]);
+  }, [loaded, explodable, story, vehicleId]);
   useEffect(() => () => useGLTF.clear(preloadedRef.current), []);
 
   useEffect(() => {
@@ -843,7 +899,7 @@ export default function ShowroomScene({
 
   // Separate or reassemble. Reduced motion: no movement, a short cross-fade instead.
   useEffect(() => {
-    if (!explodable) return;
+    if (!explodable || story) return;
     explosion.toggle(exploded, performance.now(), reduced);
     if (reduced && !firstToggle.current) {
       wrapperRef.current?.animate([{ opacity: 0.3 }, { opacity: 1 }], {
@@ -855,11 +911,13 @@ export default function ShowroomScene({
     invalidateRef.current();
     // `reduced` is read at toggle time only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exploded, explodable, explosion]);
+  }, [exploded, explodable, story, explosion]);
 
   const handleSettled = useCallback(() => setSettleCount((n) => n + 1), []);
 
-  const animate = active && !still && !reduced && autoWindow;
+  // A scroll story moves the turntable itself; nothing auto-rotates.
+  const frozen = still || !!story;
+  const animate = active && !frozen && !reduced && autoWindow;
 
   return (
     <div ref={wrapperRef}>
@@ -890,7 +948,7 @@ export default function ShowroomScene({
       {!turntable && <color attach="background" args={[ROOM_BACKDROP]} />}
       <AdaptiveDpr />
       <PerformanceMonitor />
-      <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}:${settleCount}`} />
+      {!turntable && <BakedShadows version={`${parts.map((p) => p.url).join("|")}:${loaded}:${settleCount}`} />}
       <RenderGate fps={budget.fps} active={active} />
       {statsEnabled() && <RenderStats />}
       <Lights theme={lightsTheme} />
@@ -899,6 +957,7 @@ export default function ShowroomScene({
         <>
           <CameraRig mobile={mobile} />
           <FrameCap enabled={animate} fps={AUTO_ROTATE_FPS} />
+          {story && <ScrollDirector story={story} spin={spin} explosion={explosion} reduced={reduced} />}
         </>
       ) : (
         <>
@@ -950,12 +1009,12 @@ export default function ShowroomScene({
           plan={plan}
           theme={theme}
           spin={turntable ? spin : undefined}
-          still={still}
+          still={frozen}
         />
         <ReadySignal onReady={handleReady} />
       </Suspense>
     </Canvas>
-    {explodable && <LabelOverlay plan={plan} overlayRef={labelsRef} />}
+    {explodable && !story && <LabelOverlay plan={plan} overlayRef={labelsRef} />}
     {!turntable && (
       <div
         ref={toolbarRef}

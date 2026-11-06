@@ -1,6 +1,5 @@
-import ShowroomHero from "@/components/hero/ShowroomHero";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import Image from "next/image";
+import Link from "next/link";
 import {
   Banknote,
   ShieldCheck,
@@ -8,12 +7,18 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import ScrollStory from "@/components/landing/ScrollStory";
+import "@/components/landing/landing.css";
+import { CATEGORIES, UPFITS, VEHICLES } from "@/lib/catalog";
 
-const pill = (variant: "default" | "secondary" | "outline" = "default") =>
-  cn(
-    buttonVariants({ variant, size: "lg" }),
-    "h-12 rounded-full px-7 text-base",
-  );
+const NAV = [
+  { href: "#services", label: "Services" },
+  { href: "#upfits", label: "Upfits" },
+  { href: "#faq", label: "FAQ" },
+];
+
+const pill =
+  "inline-flex min-h-14 items-center justify-center rounded-full px-7 text-lg";
 
 const services: { icon: LucideIcon; title: string; text: string }[] = [
   {
@@ -36,12 +41,6 @@ const services: { icon: LucideIcon; title: string; text: string }[] = [
     title: "Fleet programs",
     text: "Fleet programs that include maintenance and warranty coverage.",
   },
-];
-
-const upfitPoints = [
-  "Service bodies and enclosed van bodies",
-  "Ladder racks and utility racks",
-  "Step, straight, and hitch-recess bumpers",
 ];
 
 const steps = [
@@ -84,35 +83,143 @@ const faqs = [
   },
 ];
 
-function SectionHeading({
-  eyebrow,
-  title,
-  className,
-}: {
-  eyebrow: string;
-  title: string;
-  className?: string;
-}) {
+function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
-    <div className={className}>
-      <p className="text-sm font-semibold uppercase tracking-wider text-primary">
+    <div>
+      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7cc4ff]">
         {eyebrow}
       </p>
-      <h2 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
-        {title}
-      </h2>
+      <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">{title}</h2>
     </div>
   );
 }
 
-export default async function Home({ searchParams }: PageProps<"/">) {
-  // Temporary: ?heroTheme=dark|light to compare themes in preview.
-  const { heroTheme } = await searchParams;
-  const theme = heroTheme === "dark" ? "dark" : "light";
-
+export default function Home() {
   return (
-    <main className="flex-1 overflow-x-clip">
-      <ShowroomHero theme={theme} />
+    <main className="landing dark flex-1 overflow-x-clip">
+      <header className="landing-header">
+        <Link href="/" className="landing-logo">
+          <Image src="/logo.webp" alt="New Work Trucks" width={40} height={40} priority />
+        </Link>
+        <nav aria-label="Primary">
+          {NAV.map((n) => (
+            <a key={n.href} href={n.href}>
+              {n.label}
+            </a>
+          ))}
+        </nav>
+        <Link href="/builder" className="story-btn story-btn-primary !min-h-12 !px-5 !text-base">
+          Start building
+        </Link>
+      </header>
+
+      <ScrollStory />
+
+      <section id="services" className="mx-auto max-w-6xl scroll-mt-16 px-4 py-24 sm:px-8">
+        <SectionHeading eyebrow="What we offer" title="Everything a work truck needs." />
+        <ul className="mt-12 grid gap-4 sm:grid-cols-2">
+          {services.map(({ icon: Icon, title, text }) => (
+            <li
+              key={title}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"
+            >
+              <Icon aria-hidden className="size-7 text-[#3ea6ff]" />
+              <h3 className="mt-4 text-xl font-semibold">{title}</h3>
+              <p className="mt-2 text-lg leading-relaxed text-[#a9b1bd]">{text}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section id="upfits" className="border-y border-white/10 bg-white/[0.02] py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-8">
+          <SectionHeading eyebrow="Upfits" title="Pick the gear. See it on the truck." />
+          <div className="mt-12 grid gap-8 md:grid-cols-3">
+            {CATEGORIES.map((c) => (
+              <div key={c.id}>
+                <h3 className="text-xl font-semibold">{c.label}</h3>
+                <ul className="mt-4 space-y-3 text-lg text-[#a9b1bd]">
+                  {UPFITS.filter((u) => u.category === c.id).map((u) => (
+                    <li key={u.id} className="border-t border-white/10 pt-3">
+                      {u.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <p className="mt-10 text-lg text-[#a9b1bd]">
+            Available on {VEHICLES.map((v) => v.name).join(" and ")}.
+          </p>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-24 sm:px-8">
+        <SectionHeading eyebrow="How it works" title="Three steps to a quote." />
+        <ol className="mt-12 grid gap-4 md:grid-cols-3">
+          {steps.map((s, i) => (
+            <li key={s.title} className="rounded-2xl border border-white/10 p-6">
+              <span className="text-sm font-semibold tracking-[0.18em] text-[#7cc4ff]">
+                0{i + 1}
+              </span>
+              <h3 className="mt-3 text-xl font-semibold">{s.title}</h3>
+              <p className="mt-2 text-lg leading-relaxed text-[#a9b1bd]">{s.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="border-y border-white/10 bg-white/[0.02]">
+        <dl className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:grid-cols-3 sm:px-8">
+          {stats.map((s) => (
+            <div key={s.label}>
+              <dt className="sr-only">{s.label}</dt>
+              <dd className="text-5xl font-bold tracking-tight text-[#3ea6ff]">{s.value}</dd>
+              <p className="mt-2 text-lg text-[#a9b1bd]" aria-hidden>
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section id="faq" className="mx-auto max-w-3xl scroll-mt-16 px-4 py-24 sm:px-8">
+        <SectionHeading eyebrow="FAQ" title="Questions, answered." />
+        <div className="mt-10 divide-y divide-white/10 border-y border-white/10">
+          {faqs.map((f) => (
+            <details key={f.q} className="group py-5">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 text-xl font-semibold [&::-webkit-details-marker]:hidden">
+                {f.q}
+                <span
+                  aria-hidden
+                  className="text-2xl text-[#3ea6ff] transition-transform group-open:rotate-45"
+                >
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 text-lg leading-relaxed text-[#a9b1bd]">{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section className="px-4 pb-24 sm:px-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 rounded-3xl border border-white/10 bg-[radial-gradient(ellipse_at_50%_0%,#1d2938,transparent_70%)] px-6 py-16 text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-5xl">
+            See it before you sign.
+          </h2>
+          <p className="max-w-xl text-lg text-[#a9b1bd]">
+            Build your truck in 3D, then send it to our team.
+          </p>
+          <Link href="/builder" className={`${pill} bg-[#3ea6ff] font-bold text-[#04121f]`}>
+            Start building →
+          </Link>
+        </div>
+      </section>
+
+      <footer className="border-t border-white/10 px-4 py-8 text-center text-sm text-[#8693a6]">
+        © New Work Trucks
+      </footer>
     </main>
   );
 }

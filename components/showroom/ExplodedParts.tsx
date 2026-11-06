@@ -44,6 +44,23 @@ export class Explosion {
     }
   }
 
+  /**
+   * Place every part for an overall progress `p` (0 mounted, 1 exploded), as
+   * when scroll drives the explosion instead of time. Parts overlap: each moves
+   * over most of the range, the first to separate starting at 0 and the last
+   * finishing at 1. Played backwards, the order reverses, as in toggle().
+   */
+  scrub(p: number) {
+    const moving = this.parts.filter((q) => q.rank >= 0);
+    const n = moving.length;
+    const span = n > 1 ? 0.6 : 1;
+    for (const q of moving) {
+      const start = n > 1 ? ((1 - span) * q.rank) / (n - 1) : 0;
+      this.progress.set(q.id, Math.min(1, Math.max(0, (p - start) / span)));
+    }
+    this.exploded = p > 0;
+  }
+
   private get target() {
     return this.exploded ? 1 : 0;
   }

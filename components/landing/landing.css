@@ -1,0 +1,361 @@
+/* Landing page: dark showroom. Tokens follow DESIGN.md §3 (dark). */
+.landing {
+  --hero-bg: #0a0b0d;
+  --hero-spot: #1d2938;
+  --hero-text: #f2f4f7;
+  --hero-muted: #a9b1bd;
+  --hero-subtle: #8693a6;
+  --hero-eyebrow: #7cc4ff;
+  --hero-accent: #3ea6ff;
+  --hero-on-accent: #04121f;
+  --chip-bg: #141a22;
+  --chip-border: #2a3644;
+  --btn2-border: #3c4757;
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+  background: var(--hero-bg);
+  color: var(--hero-text);
+}
+
+/* ---- Header ---- */
+.landing-header {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: linear-gradient(to bottom, rgb(10 11 13 / 0.85), rgb(10 11 13 / 0));
+}
+.landing-logo {
+  display: block;
+  padding: 4px;
+  background: #1f5eff;
+}
+.landing-header nav {
+  display: none;
+  gap: 28px;
+  font-size: 16px;
+  font-weight: 500;
+}
+.landing-header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--hero-muted);
+}
+.landing-header nav a:hover {
+  color: var(--hero-text);
+}
+@media (min-width: 768px) {
+  .landing-header {
+    padding: 10px 32px;
+  }
+  .landing-header nav {
+    display: flex;
+  }
+}
+
+/* Shared buttons */
+.story-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 28px;
+  border-radius: 999px;
+  font-size: 18px;
+  text-decoration: none;
+}
+.story-btn-primary {
+  font-weight: 700;
+  color: var(--hero-on-accent);
+  background: var(--hero-accent);
+}
+.story-btn-secondary {
+  font-weight: 600;
+  color: var(--hero-text);
+  border: 1px solid var(--btn2-border);
+}
+.story-btn:focus-visible,
+.landing-header a:focus-visible {
+  outline: 3px solid var(--hero-accent);
+  outline-offset: 3px;
+}
+
+/* ---- Scroll story ---- */
+.story {
+  position: relative;
+  isolation: isolate;
+}
+
+/* The 3D stage stays pinned; the chapters scroll over it. */
+.story-pin {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  margin-bottom: -100svh;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 62%, var(--hero-spot) 0%, var(--hero-bg) 72%);
+}
+.story-stage {
+  position: absolute;
+  inset: 0;
+}
+.story-stage canvas {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.story-stage[data-ready] canvas {
+  opacity: 1;
+}
+.story .sh-loading {
+  color: var(--hero-muted);
+  font-size: 18px;
+}
+
+/* Chapter progress */
+.story-rail {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-rail li {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--chip-border);
+  transition: height 250ms ease, background 250ms ease;
+}
+.story-rail li[data-on] {
+  height: 24px;
+  background: var(--hero-accent);
+}
+@media (min-width: 768px) {
+  .story-rail {
+    right: 32px;
+  }
+}
+
+.story-chapters {
+  position: relative;
+  z-index: 1;
+}
+.story-chapter {
+  display: flex;
+  min-height: 150svh;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.story-chapter:first-child {
+  min-height: 100svh;
+}
+
+.story-card {
+  pointer-events: auto;
+  position: sticky;
+  align-self: flex-start;
+  /* Mobile: the card sits at the bottom, the truck above it. */
+  top: calc(100svh - var(--card-room, 46svh) - 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 520px;
+  margin-inline: auto;
+  padding: 20px;
+  border-radius: 20px;
+  background: rgb(10 11 13 / 0.72);
+  border: 1px solid var(--chip-border);
+  backdrop-filter: blur(12px);
+  opacity: 0.0;
+  translate: 0 24px;
+  transition: opacity 400ms ease, translate 400ms ease;
+}
+.story-chapter[data-on] .story-card {
+  opacity: 1;
+  translate: 0 0;
+}
+.story-card h1,
+.story-card h2 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+}
+.story-card h1 {
+  font-size: clamp(36px, 9vw, 72px);
+}
+.story-card h2 {
+  font-size: clamp(30px, 7vw, 52px);
+}
+.story-eyebrow,
+.story-step {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hero-eyebrow);
+}
+.story-lede {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--hero-muted);
+}
+.story-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.story-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hero-subtle);
+}
+.story-scroll svg {
+  width: 16px;
+  height: 16px;
+}
+
+.story-parts,
+.story-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-parts li,
+.story-swatches li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 16px;
+  color: var(--hero-subtle);
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+}
+.story-parts strong {
+  font-weight: 600;
+  color: var(--hero-text);
+}
+.story-parts svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--hero-accent);
+}
+.story-swatches span {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.3);
+}
+.story-swatches li[data-on] {
+  color: var(--hero-text);
+  border-color: var(--hero-accent);
+}
+
+/* The first and last chapters are centred, not beside the truck. */
+.story-chapter[data-side="top"] .story-card {
+  top: 12svh;
+  background: none;
+  border: 0;
+  backdrop-filter: none;
+  padding: 0;
+  text-align: center;
+  align-items: center;
+  max-width: 900px;
+}
+.story-chapter[data-side="bottom"] .story-card {
+  text-align: center;
+  align-items: center;
+}
+
+@media (min-aspect-ratio: 29/20) {
+  .story-chapter {
+    padding: 0 6vw;
+  }
+  .story-card {
+    top: 50svh;
+    translate: 0 calc(-50% + 24px);
+    align-self: flex-start;
+    margin-inline: 0;
+    max-width: 440px;
+    padding: 28px;
+    background: none;
+    border: 0;
+    backdrop-filter: none;
+  }
+  .story-chapter[data-on] .story-card {
+    translate: 0 -50%;
+  }
+  /* Truck sits opposite the text: see `shift` in scroll-story.ts. */
+  .story-chapter[data-side="left"] .story-card {
+    margin-right: auto;
+  }
+  .story-chapter[data-side="right"] .story-card {
+    margin-left: auto;
+  }
+  /* The opening sits beside the truck like the chapters do. */
+  .story-chapter[data-side="top"] .story-card {
+    top: 50svh;
+    translate: 0 calc(-50% + 24px);
+    margin: 0 auto 0 0;
+    max-width: 560px;
+    text-align: left;
+    align-items: flex-start;
+  }
+  .story-chapter[data-side="top"][data-on] .story-card {
+    translate: 0 -50%;
+  }
+  .story-chapter[data-side="top"] .story-actions {
+    justify-content: flex-start;
+  }
+  .story-chapter[data-side="bottom"] .story-card {
+    top: auto;
+    margin-inline: auto;
+    max-width: 640px;
+  }
+  /* The closing call to action sits above the truck. */
+  .story-chapter[data-side="bottom"] .story-card {
+    top: 14svh;
+    translate: 0 24px;
+  }
+  .story-chapter[data-side="bottom"][data-on] .story-card {
+    translate: 0 0;
+  }
+  .story-actions {
+    flex-direction: row;
+    justify-content: center;
+  }
+  .story-card .story-lede {
+    font-size: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-card,
+  .story-rail li,
+  .story-stage canvas {
+    transition: none;
+  }
+}

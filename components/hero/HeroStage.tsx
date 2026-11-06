@@ -8,6 +8,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import type { ScrollStory } from "../showroom/ScrollDirector";
+import "./showroom-hero.css";
 import { HERO_BUILD, type HeroTheme } from "../showroom/scene-config";
 
 // three.js and the scene are fetched only after hydration (see mount effect).
@@ -43,11 +45,20 @@ export default function HeroStage({
   theme,
   model,
   label,
+  className = "sh-stage",
+  partColors,
+  story,
   children,
 }: {
   theme: HeroTheme;
   model?: string;
   label: string;
+  /** Replaces the hero's stage layout, e.g. a full-viewport sticky stage. */
+  className?: string;
+  /** Repaints the build; see ShowroomScene. */
+  partColors?: Record<string, Record<string, string>>;
+  /** Scroll drives the scene instead of drag and auto-rotate. */
+  story?: ScrollStory;
   /** Server-rendered poster image. */
   children: ReactNode;
 }) {
@@ -91,11 +102,11 @@ export default function HeroStage({
   return (
     <div
       ref={setStage}
-      className="sh-stage"
+      className={className}
       data-ready={ready || undefined}
       role="img"
       aria-label={label}
-      tabIndex={0}
+      tabIndex={story ? undefined : 0}
     >
       {/* {children} */}
       {/* Never a blank stage while loading (3D-MODELING-GUIDELINES §5). */}
@@ -113,7 +124,9 @@ export default function HeroStage({
             model={model}
             mobile={mobile}
             active={visible && tabShown}
-            inputTarget={stage}
+            inputTarget={story ? null : stage}
+            partColors={partColors}
+            story={story}
             onReady={onReady}
           />
         </SceneBoundary>
