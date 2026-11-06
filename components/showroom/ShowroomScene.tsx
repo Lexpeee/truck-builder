@@ -217,34 +217,6 @@ export function Turntable({ theme }: { theme: HeroTheme }) {
   );
 }
 
-export function Ticks({ theme }: { theme: HeroTheme }) {
-  const c = SCENE_THEMES[theme].tick;
-  return (
-    <>
-      {Array.from({ length: TICK_COUNT }, (_, i) => {
-        const currentColor = i % 2 === 0 ? "#ffee02" : "#333333"; // Alternate colors for ticks
-        const a = (i / TICK_COUNT) * Math.PI * 2;
-        const r = DISC.radius - 0.25;
-        return (
-          <mesh
-            key={i}
-            position={[Math.cos(a) * r, DISC.height + 0.005, Math.sin(a) * r]}
-            rotation={[0, -a, 0]}
-          >
-            <boxGeometry args={[0.28, 0.01, 0.35]} />
-            <meshStandardMaterial
-              {...{
-                ...c,
-                color: currentColor, // Use the alternating color
-              }}
-            />
-          </mesh>
-        );
-      })}
-    </>
-  );
-}
-
 function disposeObject(root: THREE.Object3D) {
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
@@ -260,6 +232,23 @@ function disposeObject(root: THREE.Object3D) {
     }
   });
 }
+
+/**
+ * Paint (vehicle and upfit) as lacquer (3D-MODELING-GUIDELINES §3, §4): the GLB's
+ * standard material becomes a physical one with a clearcoat, so the studio strips
+ * read as sharp highlight lines over the colour. Deliberately glossier than the
+ * guidelines' satin powder coat for upfits.
+ */
+const glossyPaint = (mat: THREE.MeshStandardMaterial) => {
+  const gloss = new THREE.MeshPhysicalMaterial();
+  // Standard's copy: Physical's own would read clearcoat fields the source lacks.
+  THREE.MeshStandardMaterial.prototype.copy.call(gloss, mat);
+  gloss.roughness = 0.4;
+  gloss.metalness = 0.2;
+  gloss.clearcoat = 1;
+  gloss.clearcoatRoughness = 0.05;
+  return gloss;
+};
 
 const Model = ({ url, position, colors }: Part & { colors?: MaterialColors }) => {
   const { scene } = useGLTF(url);
@@ -278,7 +267,7 @@ const Model = ({ url, position, colors }: Part & { colors?: MaterialColors }) =>
       m.castShadow = m.receiveShadow = true;
       const mat = m.material as THREE.MeshStandardMaterial;
       if (!own.has(mat)) {
-        const copy = mat.clone();
+        const copy = PAINT_MATERIALS.has(mat.name) ? glossyPaint(mat) : mat.clone();
         copy.userData.fadeBase = rememberFadeBase(copy);
         own.set(mat, copy);
         if (PAINT_MATERIALS.has(mat.name)) paint.push(copy);
@@ -333,49 +322,6 @@ const ROOM_WALLS: { nodes: RegExp; hiddenWhen: (c: THREE.Vector3) => boolean }[]
 const setVisible = (objects: THREE.Object3D[], visible: boolean) => {
   for (const o of objects) o.visible = visible;
 };
-
-/**
- * The workshop room around the truck. Its GLB has no materials (the loader's
- * default would be fully metallic), only vertex colours, so it gets one matte
- * material. Its display platform is skipped: the builder's own turntable is
- * used instead.
- */
-function Room() {
-  const { scene } = useGLTF(ROOM_URL);
-  const walls = useRef<{ objects: THREE.Object3D[]; hiddenWhen: (c: THREE.Vector3) => boolean }[]>([]);
-
-  useLayoutEffect(() => {
-    const material = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      // The truck's lights are set for a white vehicle; scale the room down so
-      // the floor reads as concrete rather than as bright as the paint.
-      color: new THREE.Color().setScalar(ROOM_BRIGHTNESS),
-      roughness: 0.9,
-      metalness: 0,
-      flatShading: true, // the GLB carries no normals
-    });
-    const found = ROOM_WALLS.map((w) => ({ objects: [] as THREE.Object3D[], hiddenWhen: w.hiddenWhen }));
-    scene.traverse((o) => {
-      if (/platform/i.test(o.name)) o.visible = false;
-      ROOM_WALLS.forEach((w, i) => w.nodes.test(o.name) && found[i].objects.push(o));
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.material = material;
-      // Only the floor takes the truck's shadow.
-      mesh.receiveShadow = /floor/i.test(o.name);
-    });
-    walls.current = found;
-    return () => material.dispose();
-  }, [scene]);
-
-  useFrame(({ camera }) => {
-    for (const w of walls.current) {
-      const hidden = w.hiddenWhen(camera.position);
-      setVisible(w.objects, !hidden);
-    }
-  });
-  return <primitive object={scene} />;
-}
 
 /** Sits the parts on the disc with the ticks; the turntable also spins them. */
 function Truck({
@@ -474,7 +420,6 @@ function Truck({
           <PresenceDriver presence={presence} onGone={onGone} onSettled={onSlideSettled} />
         )}
       </group>
-      <Ticks theme={theme} />
     </group>
   );
 }
@@ -699,6 +644,8 @@ const StudioEnvironment = memo(function StudioEnvironment() {
   return (
     <>
       <Environment resolution={256} frames={1}>
+        {/* dim grey room: where no strip is, mirrors and clearcoat reflect this, not black */}
+        <color attach="background" args={["#5a6270"]} />
         {/* overhead softbox: long highlight along the roof and service body */}
         <Lightformer
           form="rect"
@@ -945,7 +892,7 @@ export default function ShowroomScene({
       <RenderGate fps={budget.fps} active={active} />
       {statsEnabled() && <RenderStats />}
       <Lights theme={lightsTheme} />
-      <Turntable theme={theme} />
+      {/* <Turntable theme={theme} /> */}
       {turntable ? (
         <>
           <CameraRig mobile={mobile} />
@@ -990,7 +937,7 @@ export default function ShowroomScene({
       <Suspense fallback={null}>
         <StudioEnvironment />
         {!turntable && <OrbitFill />}
-        {!turntable && <Room />}
+        {/* {!turntable && <Room />} */}
         <Truck
           vehicleId={vehicleId}
           parts={parts}

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "models:optimize": "node --no-warnings scripts/optimize-models.mjs",
-    "models:check": "node --no-warnings scripts/optimize-models.mjs --check"
+    "models:check": "node --no-warnings scripts/optimize-models.mjs --check",
+    "models:calibrate": "node --no-warnings scripts/calibrate-models.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
